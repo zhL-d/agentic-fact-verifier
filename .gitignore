@@ -1,0 +1,17 @@
+# secrets
+.env
+*.key
+
+# python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# data — large downloads, don't commit
+data/raw/
+data/knowledge_store/
+external/
+
+# eval outputs (per-run artifacts; keep the summarized ones we choose to commit manually)
+eval/*.json
+eval/*.csv

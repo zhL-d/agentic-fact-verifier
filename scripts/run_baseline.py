@@ -47,7 +47,15 @@ def main():
             print(f"[{i}] WARNING: no evidence retrieved (claim not indexed yet?)")
             continue
 
-        verdict = make_verdict(claim, evidence)
+        try:
+            verdict = make_verdict(claim, evidence)
+        except Exception as e:
+            print(f"[{i}] SKIPPED, verdict call failed: {e}\n")
+            results.append(
+                {"claim_id": claim_id, "claim": claim, "gold_label": gold_label, "error": str(e)}
+            )
+            continue
+
         is_correct = verdict["label"] == gold_label
         correct += is_correct
 
@@ -68,8 +76,12 @@ def main():
             }
         )
 
-    n = len(results)
-    print(f"--- Baseline accuracy: {correct}/{n} ({correct/n*100:.1f}%) ---" if n else "No results.")
+    n = sum(1 for r in results if "correct" in r)
+    n_errors = sum(1 for r in results if "error" in r)
+    print(
+        f"--- Baseline accuracy: {correct}/{n} ({correct/n*100:.1f}%), "
+        f"{n_errors} skipped due to errors ---" if n else "No results."
+    )
 
     out_path = Path(__file__).parent.parent / "eval" / "baseline_results.json"
     out_path.write_text(json.dumps(results, indent=2))

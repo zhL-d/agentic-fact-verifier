@@ -33,6 +33,8 @@ one label from: {labels}.
 
 Respond with a single JSON object only, in this exact shape:
 {{"label": "<one of the labels above>", "justification": "<brief reasoning>"}}
+
+Keep the justification to at most 2 sentences.
 """
 
 
@@ -56,10 +58,11 @@ def make_verdict(claim: str, evidence_chunks: list[dict]) -> dict:
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
-        max_tokens=3000,  # Nemotron-3-Ultra reasons internally before the
-        # final answer (confirmed in the Ev2R cost probe: 632-1070
-        # completion tokens for a much simpler task) — 1000 was too low
-        # and truncated responses mid-reasoning, before any JSON appeared.
+        max_tokens=6000,  # Nemotron-3-Ultra reasons internally before the
+        # final answer; 1000 truncated mid-reasoning, 3000 still
+        # truncated mid-justification on some claims. Paired with the
+        # "keep justification to 2 sentences" instruction above so the
+        # budget isn't split between long reasoning AND a long answer.
     )
     raw = completion.choices[0].message.content
     finish_reason = completion.choices[0].finish_reason

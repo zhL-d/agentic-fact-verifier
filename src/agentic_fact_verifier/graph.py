@@ -21,7 +21,6 @@ from langgraph.graph import END, StateGraph
 
 from agentic_fact_verifier.decomposition import decompose_claim
 from agentic_fact_verifier.sufficiency import check_sufficiency
-from agentic_fact_verifier.verdict import make_verdict
 
 MAX_ITERATIONS = 3  # hard cap, bounds cost/latency
 
@@ -60,7 +59,7 @@ def _dedupe(chunks: list[dict]) -> list[dict]:
     return out
 
 
-def build_graph(retrieve_tool, top_k_per_query: int = 3):
+def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
     """`retrieve_tool` is the MCP-exposed `retrieve_evidence` tool."""
 
     def decompose_node(state: VerificationState) -> dict:
@@ -169,7 +168,7 @@ def build_graph(retrieve_tool, top_k_per_query: int = 3):
             return "verdict"
         return "retrieve"
 
-    def verdict_node(state: VerificationState) -> dict:
+    async def verdict_node(state: VerificationState) -> dict:
         sub_findings = [
             {"question": t["question"], "resolved": t["resolved"], "finding": t["reasoning"]}
             for t in state["threads"]
@@ -177,11 +176,11 @@ def build_graph(retrieve_tool, top_k_per_query: int = 3):
 
         all_evidence = _dedupe([chunk for t in state["threads"] for chunk in t["evidence"]])
 
-        verdict = make_verdict(
-            state["claim"],
-            all_evidence,
-            sub_findings=sub_findings,
+
+        content_blocks = await judge_tool.ainvoke(
+            {"claim": state["claim"], "evidence": all_evidence, "sub_findings": sub_findings}
         )
+        verdict = json.loads(content_blocks[0]["text"])
 
         cited_sources = [
             {"citation_number": n, "url": all_evidence[n - 1]["url"]}

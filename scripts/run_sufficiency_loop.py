@@ -16,7 +16,7 @@ from elasticsearch import Elasticsearch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from agentic_fact_verifier.graph import MAX_ITERATIONS, build_graph, run_verification  # noqa: E402
-from agentic_fact_verifier.mcp_client import mcp_retrieval_session  # noqa: E402
+from agentic_fact_verifier.mcp_client import mcp_judge_session, mcp_retrieval_session  # noqa: E402
 
 DEV_JSON = Path(__file__).parent.parent / "data" / "raw" / "dev.json"
 
@@ -32,8 +32,8 @@ async def main():
 
     claims = json.loads(DEV_JSON.read_text())[: args.limit]
 
-    async with mcp_retrieval_session() as retrieve_tool:
-        app = build_graph(retrieve_tool)
+    async with mcp_retrieval_session() as retrieve_tool, mcp_judge_session() as judge_tool:
+        app = build_graph(retrieve_tool, judge_tool)
         results = await _run_claims(app, claims)
 
     correct = sum(1 for r in results if r.get("correct"))

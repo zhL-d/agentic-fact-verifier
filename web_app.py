@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from agentic_fact_verifier.graph import build_graph, run_verification  # noqa: E402
-from agentic_fact_verifier.mcp_client import mcp_retrieval_session  # noqa: E402
+from agentic_fact_verifier.mcp_client import mcp_judge_session, mcp_retrieval_session  # noqa: E402
 
 DEV_JSON = Path(__file__).parent / "data" / "raw" / "dev.json"
 _claims = json.loads(DEV_JSON.read_text())
@@ -50,8 +50,8 @@ async def verify(claim_id: int):
     entry = _claims[claim_id]
 
     try:
-        async with mcp_retrieval_session() as retrieve_tool:
-            graph_app = build_graph(retrieve_tool)
+        async with mcp_retrieval_session() as retrieve_tool, mcp_judge_session() as judge_tool:
+            graph_app = build_graph(retrieve_tool, judge_tool)
             final_state = await run_verification(graph_app, entry["claim"], str(claim_id))
     except Exception as e:
         raise HTTPException(502, f"Pipeline run failed: {e}") from e

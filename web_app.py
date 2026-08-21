@@ -10,24 +10,27 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from agentic_fact_verifier.graph import build_graph, run_verification  # noqa: E402
+from agentic_fact_verifier.mcp_client import mcp_retrieval_session  # noqa: E402
 
 DEV_JSON = Path(__file__).parent / "data" / "raw" / "dev.json"
 _claims = json.loads(DEV_JSON.read_text())
 
-_SERVER_SCRIPT = Path(__file__).parent / "src" / "agentic_fact_verifier" / "verification_server.py"
-
 CURATED_CLAIM_IDS = [0, 1, 6, 9, 10, 13]
 
+WEB_DIST = Path(__file__).parent / "web" / "dist"
+
 app = FastAPI()
+app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
 
 @app.get("/")
 async def index():
-    return FileResponse(Path(__file__).parent / "web" / "index.html")
+    return FileResponse(WEB_DIST / "index.html")
 
 
 @app.get("/api/claims")
@@ -47,21 +50,27 @@ async def verify(claim_id: int):
     entry = _claims[claim_id]
 
     try:
-        server_params = StdioServerParameters(command=sys.executable, args=[str(_SERVER_SCRIPT)])
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "verify_claim", {"claim": entry["claim"], "claim_id": str(claim_id)}
-                )
-                if result.isError:
-                    detail = result.content[0].text if result.content else "unknown tool error"
-                    raise HTTPException(502, f"verify_claim tool call failed: {detail}")
-                payload = json.loads(result.content[0].text)
-    except HTTPException:
-        raise
+        async with mcp_retrieval_session() as retrieve_tool:
+            graph_app = build_graph(retrieve_tool)
+            final_state = await run_verification(graph_app, entry["claim"], str(claim_id))
     except Exception as e:
         raise HTTPException(502, f"Pipeline run failed: {e}") from e
 
-    payload["gold_label"] = entry["label"]
+    payload = {
+        "claim": entry["claim"],
+        "claim_id": str(claim_id),
+        "verdict": final_state["verdict"],
+        "all_evidence": final_state["all_evidence"],
+        "rounds": final_state["rounds"],
+        "threads": [
+            {
+                "question": t["question"],
+                "resolved": t["resolved"],
+                "reasoning": t["reasoning"],
+                "evidence": t["evidence"],
+            }
+            for t in final_state["threads"]
+        ],
+        "gold_label": entry["label"],
+    }
     return JSONResponse(payload)

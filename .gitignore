@@ -16,3 +16,8 @@ external/
 eval/*.json
 eval/*.csv
 eval/*.log
+
+# web/ — TypeScript + Vite, built artifact and installed packages, not source
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo

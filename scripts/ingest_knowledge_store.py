@@ -1,29 +1,5 @@
 """Embed and bulk-index the AVeriTeC dev knowledge store into Elasticsearch.
 
-Revision history: the first version indexed one chunk per raw sentence in
-`url2text`, with no deduplication. On real data this was impractical, a
-single claim (0.json, 825 documents) didn't finish embedding in 9+ minutes,
-extrapolating to 3+ days for the full 500-claim set. Root cause: many of
-the ~800-1,300 documents per claim are near-duplicates of each other (same
-article scraped via different search queries, repeated boilerplate/nav
-text), and one-sentence chunks are far more granular than needed.
-
-Fixed with two changes, both grounded in verified current best practice
-(not arbitrary tuning):
-  1. Deduplicate near-identical sentences before chunking, the ORIGINAL
-     AVeriTeC baseline's own code does this for the same reason
-     (retrieval_optimized.py's remove_duplicates()). Lossless: we're not
-     discarding information, just not embedding the same sentence 50 times.
-  2. Chunk at ~256-512 tokens (approximated via word count) via recursive
-     grouping of consecutive sentences within a document, not one sentence
-     per chunk. This is the confirmed current default for hybrid-search
-     chunking, and is also generally better for semantic embeddings (a
-     single sentence often lacks enough context to embed meaningfully).
-
-Resumable: skips any claim_id that already has documents indexed, so a
-re-run after an interruption picks up where it left off rather than
-re-embedding everything.
-
 Usage:
     uv run scripts/ingest_knowledge_store.py             # full run, all 500 claims
     uv run scripts/ingest_knowledge_store.py --limit 5   # test on 5 claims first

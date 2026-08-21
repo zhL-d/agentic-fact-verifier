@@ -114,23 +114,38 @@ def build_graph(retrieve_tool, top_k_per_query: int = 3):
         }
 
     def sufficiency_node(state: VerificationState) -> dict:
-        check = check_sufficiency(
-            state["claim"],
-            [{"question": t["question"], "evidence": t["evidence"]} for t in state["threads"]],
-        )
+        threads = state["threads"]
+
+        unresolved_indices = [i for i, t in enumerate(threads) if not t["resolved"]]
+
+        result_by_index = {}
+        if unresolved_indices:
+            check = check_sufficiency(
+                state["claim"],
+                [{"question": threads[i]["question"], "evidence": threads[i]["evidence"]} for i in unresolved_indices],
+            )
+            result_by_index = dict(zip(unresolved_indices, check.threads))
+
         last_detail = state.get("last_round_detail", [])
         new_threads = []
         round_threads_log = []
-        for i, thread in enumerate(state["threads"]):
-            result = check.threads[i]
-            new_threads.append(
-                {
-                    **thread,
-                    "resolved": result.resolved,
-                    "reasoning": result.reasoning,
-                    "queries_to_run": [] if result.resolved else result.refined_queries,
-                }
-            )
+        for i, thread in enumerate(threads):
+            if i in result_by_index:
+                result = result_by_index[i]
+                new_threads.append(
+                    {
+                        **thread,
+                        "resolved": result.resolved,
+                        "reasoning": result.reasoning,
+                        "queries_to_run": [] if result.resolved else result.refined_queries,
+                    }
+                )
+                resolved_this_round, reasoning_this_round = result.resolved, result.reasoning
+            else:
+
+                new_threads.append({**thread, "queries_to_run": []})
+                resolved_this_round, reasoning_this_round = thread["resolved"], thread["reasoning"]
+
             detail = last_detail[i] if i < len(last_detail) else {
                 "queries_used": [], "new_evidence": [], "n_new_evidence": 0
             }
@@ -140,8 +155,8 @@ def build_graph(retrieve_tool, top_k_per_query: int = 3):
                     "queries_used": detail["queries_used"],
                     "new_evidence": detail["new_evidence"],
                     "n_new_evidence": detail["n_new_evidence"],
-                    "resolved": result.resolved,
-                    "reasoning": result.reasoning,
+                    "resolved": resolved_this_round,
+                    "reasoning": reasoning_this_round,
                 }
             )
 

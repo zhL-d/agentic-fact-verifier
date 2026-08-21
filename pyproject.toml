@@ -6,9 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "elasticsearch>=9.5.0",
+    "fastapi>=0.141.1",
+    "langchain-mcp-adapters>=0.3.2",
     "langgraph>=1.2.11",
+    "mcp>=1.29.0",
     "openai>=3.2.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.3",
     "sentence-transformers>=6.0.0",
+    "uvicorn>=0.52.4",
 ]

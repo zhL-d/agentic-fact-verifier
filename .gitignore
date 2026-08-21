@@ -16,7 +16,3 @@ external/
 eval/*.json
 eval/*.csv
 eval/*.log
-
-# Chainlit's auto-generated local scaffold (default config + translations),
-# not authored project content
-.chainlit/

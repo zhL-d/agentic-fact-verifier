@@ -7,14 +7,16 @@ Usage:
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import torch
 from elasticsearch import Elasticsearch, helpers
 from sentence_transformers import SentenceTransformer
 
+
 KNOWLEDGE_STORE_DIR = Path(__file__).parent.parent / "data" / "knowledge_store" / "dev"
-INDEX_NAME = "averitec_dev_chunks"
+INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BATCH_SIZE = 256
 

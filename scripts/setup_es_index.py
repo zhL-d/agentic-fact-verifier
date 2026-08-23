@@ -1,13 +1,15 @@
 """Create the Elasticsearch index for hybrid (BM25 + kNN) retrieval over the
-AVeriTeC dev knowledge store.
+AVeriTeC dev knowledge store or any other dataset, via ES_INDEX_NAME.
 
 Usage:
     uv run scripts/setup_es_index.py
 """
 
+import os
+
 from elasticsearch import Elasticsearch
 
-INDEX_NAME = "averitec_dev_chunks"
+INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
 EMBEDDING_DIMS = 384  # matches sentence-transformers/all-MiniLM-L6-v2
 
 MAPPING = {

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from agentic_fact_verifier.llm_client import call_llm
 
+
 VERDICT_LABELS = [
     "Supported",
     "Refuted",
@@ -101,10 +102,16 @@ def make_verdict(
     evidence_incomplete: bool = False,
     unresolved_questions: list[str] | None = None,
     sub_findings: list[dict] | None = None,
+    labels: list[str] | None = None,
 ) -> dict:
     """`sub_findings`, when provided, is the preferred path: a list of
     {"question": str, "resolved": bool, "finding": str}, one per
-    sub-question thread, and the verdict is synthesized from these."""
+    sub-question thread, and the verdict is synthesized from these.
+
+    `labels` overrides VERDICT_LABELS (AVeriTeC's own taxonomy) with a
+    different dataset's own label set — the prompting logic itself
+    doesn't assume any particular taxonomy."""
+    labels = labels or VERDICT_LABELS
     evidence_text = "\n\n".join(
         f"[{i+1}] {chunk['text']}" for i, chunk in enumerate(evidence_chunks)
     )
@@ -119,7 +126,7 @@ def make_verdict(
             claim=claim,
             sub_findings=findings_text,
             evidence=evidence_text,
-            labels=", ".join(VERDICT_LABELS),
+            labels=", ".join(labels),
         )
     else:
         if evidence_incomplete and unresolved_questions:
@@ -134,7 +141,7 @@ def make_verdict(
             claim=claim,
             evidence=evidence_text,
             incomplete_note=incomplete_note,
-            labels=", ".join(VERDICT_LABELS),
+            labels=", ".join(labels),
         )
 
     raw = call_llm(prompt)

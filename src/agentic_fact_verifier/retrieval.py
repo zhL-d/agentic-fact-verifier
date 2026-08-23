@@ -8,10 +8,12 @@ fused in Python with the standard RRF formula
 (score = sum of 1/(k+rank) across rankers, k=60, the same constant
 Elasticsearch's own implementation and the original RRF paper use)."""
 
+import os
+
 from elasticsearch import Elasticsearch
 from sentence_transformers import SentenceTransformer
 
-INDEX_NAME = "averitec_dev_chunks"
+INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 RRF_K = 60  # standard constant from the original RRF paper / ES's own default
 
@@ -36,15 +38,24 @@ def _rrf_fuse(*ranked_lists: list[str], k: int = RRF_K) -> list[str]:
 
 
 def hybrid_search(
-    es: Elasticsearch, claim_id: str, query: str, top_k: int = 5
+    es: Elasticsearch,
+    claim_id: str,
+    query: str,
+    top_k: int = 5,
+    index_name: str = INDEX_NAME,
 ) -> list[dict]:
     """Retrieve top_k chunks for `query`, scoped to `claim_id`, combining
-    BM25 keyword search and kNN semantic search via our own RRF fusion."""
+    BM25 keyword search and kNN semantic search via our own RRF fusion.
+
+    `index_name` defaults to this module's INDEX_NAME (itself overridable
+    via the ES_INDEX_NAME env var) but can be passed explicitly per call —
+    this function has no AVeriTeC-specific logic, only a configurable
+    index to point at."""
     query_embedding = _get_model().encode(query, normalize_embeddings=True).tolist()
     candidate_pool = top_k * 10
 
     bm25_resp = es.search(
-        index=INDEX_NAME,
+        index=index_name,
         query={
             "bool": {
                 "must": {"match": {"text": query}},
@@ -54,7 +65,7 @@ def hybrid_search(
         size=candidate_pool,
     )
     knn_resp = es.search(
-        index=INDEX_NAME,
+        index=index_name,
         knn={
             "field": "embedding",
             "query_vector": query_embedding,

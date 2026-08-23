@@ -1,34 +1,31 @@
-import sys
+"""Client helpers for connecting to mcp_server.py and judge_server.py.
+"""
+
+import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
+from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import load_mcp_tools
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 
-_SERVER_SCRIPT = Path(__file__).parent / "mcp_server.py"
-_JUDGE_SERVER_SCRIPT = Path(__file__).parent / "judge_server.py"
+RETRIEVAL_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8100/mcp")
+JUDGE_SERVER_URL = os.environ.get("JUDGE_SERVER_URL", "http://localhost:8101/mcp")
 
 
 @asynccontextmanager
 async def mcp_retrieval_session():
-    server_params = StdioServerParameters(command=sys.executable, args=[str(_SERVER_SCRIPT)])
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = await load_mcp_tools(session)
-            tools_by_name = {t.name: t for t in tools}
-            yield tools_by_name["retrieve_evidence"]
+    connection = {"transport": "streamable_http", "url": RETRIEVAL_SERVER_URL}
+    async with create_session(connection) as session:
+        await session.initialize()
+        tools = await load_mcp_tools(session)
+        tools_by_name = {t.name: t for t in tools}
+        yield tools_by_name["retrieve_evidence"]
 
 
 @asynccontextmanager
 async def mcp_judge_session():
-    server_params = StdioServerParameters(
-        command=sys.executable, args=[str(_JUDGE_SERVER_SCRIPT)]
-    )
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = await load_mcp_tools(session)
-            tools_by_name = {t.name: t for t in tools}
-            yield tools_by_name["synthesize_verdict"]
+    connection = {"transport": "streamable_http", "url": JUDGE_SERVER_URL}
+    async with create_session(connection) as session:
+        await session.initialize()
+        tools = await load_mcp_tools(session)
+        tools_by_name = {t.name: t for t in tools}
+        yield tools_by_name["synthesize_verdict"]

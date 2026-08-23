@@ -1,7 +1,9 @@
 """MCP server exposing citation-grounded verdict synthesis as a standalone tool.
+
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -9,9 +11,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.fastmcp import FastMCP
 
-from agentic_fact_verifier.verdict import make_verdict  # noqa: E402
+from agentic_fact_verifier.verdict import VERDICT_LABELS, make_verdict  # noqa: E402
 
-mcp = FastMCP("agentic-fact-verifier-judge")
+HOST = os.environ.get("JUDGE_SERVER_HOST", "127.0.0.1")
+PORT = int(os.environ.get("JUDGE_SERVER_PORT", "8101"))
+
+mcp = FastMCP("agentic-fact-verifier-judge", host=HOST, port=PORT)
+
+_labels_env = os.environ.get("VERDICT_LABELS")
+LABELS = [label.strip() for label in _labels_env.split(",")] if _labels_env else VERDICT_LABELS
 
 
 @mcp.tool()
@@ -36,9 +44,9 @@ def synthesize_verdict(
         JSON-encoded {"label", "justification", "citations",
         "invalid_citations", "n_evidence_available"}.
     """
-    verdict = make_verdict(claim, evidence, sub_findings=sub_findings)
+    verdict = make_verdict(claim, evidence, sub_findings=sub_findings, labels=LABELS)
     return json.dumps(verdict)
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="streamable-http")

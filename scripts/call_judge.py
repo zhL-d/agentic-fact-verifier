@@ -1,4 +1,5 @@
-"""Manual test client for the synthesize_verdict MCP tool.
+"""Manual test client for the synthesize_verdict MCP tool (judge_server.py).
+
 
 Usage:
     uv run scripts/call_judge.py 1 9 10
@@ -9,33 +10,17 @@ import json
 import sys
 from pathlib import Path
 
-from langchain_mcp_adapters.tools import load_mcp_tools
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from agentic_fact_verifier.mcp_client import mcp_retrieval_session  # noqa: E402
+from agentic_fact_verifier.mcp_client import mcp_judge_session, mcp_retrieval_session  # noqa: E402
 
 DEV_JSON = Path(__file__).parent.parent / "data" / "raw" / "dev.json"
-_JUDGE_SERVER_SCRIPT = (
-    Path(__file__).parent.parent / "src" / "agentic_fact_verifier" / "judge_server.py"
-)
 
 
 async def main():
     claim_ids = [int(a) for a in sys.argv[1:]] or [0]
     claims = json.loads(DEV_JSON.read_text())
 
-    judge_params = StdioServerParameters(command=sys.executable, args=[str(_JUDGE_SERVER_SCRIPT)])
-    async with (
-        mcp_retrieval_session() as retrieve_tool,
-        stdio_client(judge_params) as (read, write),
-        ClientSession(read, write) as judge_session,
-    ):
-        await judge_session.initialize()
-        judge_tools = await load_mcp_tools(judge_session)
-        synthesize_tool = {t.name: t for t in judge_tools}["synthesize_verdict"]
-
+    async with mcp_retrieval_session() as retrieve_tool, mcp_judge_session() as synthesize_tool:
         for cid in claim_ids:
             entry = claims[cid]
             claim = entry["claim"]

@@ -1,7 +1,7 @@
-"""Local web UI for the agentic fact verifier.
+"""API server for the agentic fact verifier.
 
 Run:
-    uv run uvicorn web_app:app --reload
+    uv run uvicorn api_server:app --reload --port 8000
 """
 
 import json
@@ -9,8 +9,7 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
@@ -22,15 +21,7 @@ _claims = json.loads(DEV_JSON.read_text())
 
 CURATED_CLAIM_IDS = [0, 1, 6, 9, 10, 13]
 
-WEB_DIST = Path(__file__).parent / "web" / "dist"
-
 app = FastAPI()
-app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
-
-
-@app.get("/")
-async def index():
-    return FileResponse(WEB_DIST / "index.html")
 
 
 @app.get("/api/claims")

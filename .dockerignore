@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+node_modules
+web/dist
+web/node_modules
+data/raw
+data/knowledge_store
+eval
+.env
+*.key

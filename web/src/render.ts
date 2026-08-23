@@ -133,12 +133,6 @@ function renderDocket(data: VerifyResponse): void {
   btnOn.addEventListener("click", () => setTrace(true));
   page.appendChild(el("div", { class: "view-toggle" }, [btnOff, btnOn]));
   page.appendChild(trace);
-  trace.appendChild(
-    el("span", {
-      class: "section-title",
-      text: "Sub-questions — each tracked as its own thread; click a round to see exactly what it found",
-    })
-  );
 
   const citedTextToNumber = new Map<string, number>();
   verdict.citations.forEach((n) => {

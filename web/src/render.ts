@@ -20,7 +20,7 @@ const page = document.getElementById("page") as HTMLDivElement;
 
 function masthead(showBack: boolean): HTMLElement {
   const children: Node[] = [
-    el("div", { class: "brand", text: "Agentic Fact Verifier · AVeriTeC docket" }),
+    el("div", { class: "brand", text: "Agentic Fact Verifier" }),
   ];
   if (showBack) children.push(el("a", { onclick: () => loadPicker(), text: "← back to claims" }));
   return el("div", { class: "masthead" }, children);
@@ -33,10 +33,7 @@ export async function loadPicker(): Promise<void> {
   page.appendChild(
     el("p", {
       class: "intro",
-      text:
-        "Pick a claim below. This runs the real agentic pipeline (decompose → retrieve → " +
-        "check sufficiency → retry/verdict) live against pre-ingested, per-claim evidence " +
-        "not open web search, so only claims already in the AVeriTeC dev set can be verified.",
+      text: "Pick a claim below.",
     })
   );
   const list = el("div", { class: "picker-list" });
@@ -114,14 +111,6 @@ function renderDocket(data: VerifyResponse): void {
   );
   header.appendChild(meta);
   header.appendChild(el("div", { class: "stamp" + (labelClass ? " " + labelClass : ""), text: verdict.label }));
-
-  const matches = verdict.label === data.gold_label;
-  const goldNote = el("div", { class: "gold-note" });
-  goldNote.appendChild(document.createTextNode("Reference label (AVeriTeC dev set): "));
-  goldNote.appendChild(el("b", { text: data.gold_label }));
-  goldNote.appendChild(document.createTextNode(" — "));
-  goldNote.appendChild(el("span", { class: matches ? "match" : "diff", text: matches ? "matches" : "differs" }));
-  header.appendChild(goldNote);
   page.appendChild(header);
 
   const findings = el("div", { class: "findings" });
@@ -263,7 +252,7 @@ function renderDocket(data: VerifyResponse): void {
   page.appendChild(
     el("footer", {
       class: "foot",
-      text: "Agentic Fact Verifier · built on the AVeriTeC benchmark · synthesize_verdict MCP tool",
+      text: "Agentic Fact Verifier",
     })
   );
 }

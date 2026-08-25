@@ -16,7 +16,8 @@ from sentence_transformers import SentenceTransformer
 
 KNOWLEDGE_STORE_DIR = Path(__file__).parent.parent / "data" / "knowledge_store" / "dev"
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v2-moe")
+EMBEDDING_PASSAGE_PROMPT = os.environ.get("EMBEDDING_PASSAGE_PROMPT", "passage")
 BATCH_SIZE = 256
 
 
@@ -104,8 +105,9 @@ def index_claim(es: Elasticsearch, model: SentenceTransformer, claim_file: Path)
         return 0
 
     texts = [c["text"] for c in chunks]
+    encode_kwargs = {"prompt_name": EMBEDDING_PASSAGE_PROMPT} if EMBEDDING_PASSAGE_PROMPT else {}
     embeddings = model.encode(
-        texts, batch_size=BATCH_SIZE, show_progress_bar=False, normalize_embeddings=True
+        texts, batch_size=BATCH_SIZE, show_progress_bar=False, normalize_embeddings=True, **encode_kwargs
     )
 
     actions = (
@@ -128,11 +130,11 @@ def main():
 
     es = Elasticsearch("http://localhost:9200")
     if not es.ping():
-        raise SystemExit("Can't reach Elasticsearch at localhost:9200 — is `docker compose up -d` running?")
+        raise SystemExit("Can't reach Elasticsearch at localhost:9200, is `docker compose up -d` running?")
 
     device = get_device()
     print(f"Loading {EMBEDDING_MODEL} on device={device}...")
-    model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+    model = SentenceTransformer(EMBEDDING_MODEL, device=device, trust_remote_code=True)
 
     claim_files = sorted(KNOWLEDGE_STORE_DIR.glob("*.json"), key=lambda p: int(p.stem))
     if args.limit:

@@ -10,7 +10,8 @@ from sentence_transformers import SentenceTransformer
 from agentic_fact_verifier.prompt_guard import scan_for_injection
 
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v2-moe")
+EMBEDDING_QUERY_PROMPT = os.environ.get("EMBEDDING_QUERY_PROMPT", "query")
 RRF_K = 60
 
 _model: SentenceTransformer | None = None
@@ -19,7 +20,7 @@ _model: SentenceTransformer | None = None
 def _get_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        _model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code=True)
     return _model
 
 
@@ -45,7 +46,8 @@ def hybrid_search(
 
     `index_name` defaults to this module's INDEX_NAME (itself overridable
     via the ES_INDEX_NAME env var) but can be passed explicitly per call."""
-    query_embedding = _get_model().encode(query, normalize_embeddings=True).tolist()
+    encode_kwargs = {"prompt_name": EMBEDDING_QUERY_PROMPT} if EMBEDDING_QUERY_PROMPT else {}
+    query_embedding = _get_model().encode(query, normalize_embeddings=True, **encode_kwargs).tolist()
     candidate_pool = top_k * 10
 
     bm25_resp = es.search(

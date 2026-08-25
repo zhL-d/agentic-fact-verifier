@@ -10,7 +10,7 @@ import os
 from elasticsearch import Elasticsearch
 
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_DIMS = 384
+EMBEDDING_DIMS = int(os.environ.get("EMBEDDING_DIMS", "768"))
 
 MAPPING = {
     "properties": {

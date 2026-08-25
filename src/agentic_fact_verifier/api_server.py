@@ -6,11 +6,12 @@ Run:
 
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from agentic_fact_verifier.graph import build_graph, run_or_resume
 from agentic_fact_verifier.mcp_client import mcp_judge_session, mcp_retrieval_session
@@ -20,9 +21,24 @@ _claims = json.loads(DEV_JSON.read_text())
 
 CURATED_CLAIM_IDS = [0, 1, 6, 9, 10, 13]
 
-CHECKPOINT_DB_PATH = os.environ.get("CHECKPOINT_DB_PATH", "checkpoints.sqlite")
+CHECKPOINT_DB_URL = os.environ.get(
+    "CHECKPOINT_DB_URL", "postgresql://afv:afv@localhost:5432/afv_checkpoints"
+)
 
-app = FastAPI()
+_checkpointer: AsyncPostgresSaver | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _checkpointer
+    async with AsyncPostgresSaver.from_conn_string(CHECKPOINT_DB_URL) as checkpointer:
+        await checkpointer.setup()
+        _checkpointer = checkpointer
+        yield
+    _checkpointer = None
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/api/claims")
@@ -46,9 +62,8 @@ async def verify(claim_id: int):
         async with (
             mcp_retrieval_session() as retrieve_tool,
             mcp_judge_session() as judge_tool,
-            AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as checkpointer,
         ):
-            graph_app = build_graph(retrieve_tool, judge_tool, checkpointer=checkpointer)
+            graph_app = build_graph(retrieve_tool, judge_tool, checkpointer=_checkpointer)
             final_state = await run_or_resume(graph_app, entry["claim"], str(claim_id), config)
     except Exception as e:
         raise HTTPException(502, f"Pipeline run failed: {e}") from e

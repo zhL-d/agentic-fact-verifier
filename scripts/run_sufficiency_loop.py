@@ -23,46 +23,54 @@ DEV_JSON = Path(__file__).parent.parent / "data" / "raw" / "dev.json"
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=15)
+    parser.add_argument("--start", type=int, default=0, help="first claim index to run (0-based)")
+    parser.add_argument("--limit", type=int, default=15, help="how many claims to run, starting at --start")
     args = parser.parse_args()
 
     es = Elasticsearch("http://localhost:9200")
     if not es.ping():
-        raise SystemExit("Can't reach Elasticsearch — is `docker compose up -d` running?")
+        raise SystemExit("Can't reach Elasticsearch, is `docker compose up -d` running?")
 
-    claims = json.loads(DEV_JSON.read_text())[: args.limit]
+    all_claims = json.loads(DEV_JSON.read_text())
+    claims = all_claims[args.start : args.start + args.limit]
 
     async with mcp_retrieval_session() as retrieve_tool, mcp_judge_session() as judge_tool:
         app = build_graph(retrieve_tool, judge_tool)
-        results = await _run_claims(app, claims)
+        results = await _run_claims(app, claims, start=args.start)
 
     correct = sum(1 for r in results if r.get("correct"))
     n = sum(1 for r in results if "correct" in r)
     n_errors = sum(1 for r in results if "error" in r)
     if n:
         print(
-            f"--- Phase 3 (sufficiency loop) accuracy: {correct}/{n} ({correct/n*100:.1f}%), "
+            f"--- Phase 3 (sufficiency loop) accuracy for this batch: {correct}/{n} ({correct/n*100:.1f}%), "
             f"{n_errors} skipped due to errors ---"
         )
     else:
         print("No results.")
 
     out_path = Path(__file__).parent.parent / "eval" / "sufficiency_loop_results.json"
-    out_path.write_text(json.dumps(results, indent=2))
-    print(f"Written to {out_path}")
+    existing = json.loads(out_path.read_text()) if out_path.exists() else []
+    by_id = {r["claim_id"]: r for r in existing}
+    for r in results:
+        by_id[r["claim_id"]] = r
+    merged = [by_id[k] for k in sorted(by_id, key=int)]
+
+    out_path.write_text(json.dumps(merged, indent=2))
+    print(f"Written {len(merged)} total results (this run added/updated {len(results)}) to {out_path}")
 
 
-async def _run_claims(app, claims) -> list[dict]:
+async def _run_claims(app, claims, start: int = 0) -> list[dict]:
     results = []
     for i, claim_entry in enumerate(claims):
         claim = claim_entry["claim"]
         gold_label = claim_entry["label"]
-        claim_id = str(i)
+        claim_id = str(start + i)
 
         try:
             final_state = await run_verification(app, claim, claim_id)
         except Exception as e:
-            print(f"[{i}] SKIPPED — pipeline failed: {e}\n")
+            print(f"[{claim_id}] SKIPPED, pipeline failed: {e}\n")
             results.append(
                 {"claim_id": claim_id, "claim": claim, "gold_label": gold_label, "error": str(e)}
             )
@@ -70,7 +78,7 @@ async def _run_claims(app, claims) -> list[dict]:
 
         verdict = final_state["verdict"]
         if verdict is None:
-            print(f"[{i}] SKIPPED — no verdict produced (likely no evidence retrieved)\n")
+            print(f"[{claim_id}] SKIPPED, no verdict produced (likely no evidence retrieved)\n")
             results.append(
                 {"claim_id": claim_id, "claim": claim, "gold_label": gold_label, "error": "no verdict"}
             )
@@ -83,7 +91,7 @@ async def _run_claims(app, claims) -> list[dict]:
             [chunk for t in final_state["threads"] for chunk in t["evidence"]]
         )
 
-        print(f"[{i}] claim: {claim[:80]}...")
+        print(f"[{claim_id}] claim: {claim[:80]}...")
         print(f"    rounds: {final_state['iteration']}  evidence used: {len(all_evidence)}")
         for round_entry in final_state["rounds"]:
             for t in round_entry["threads"]:
@@ -101,7 +109,7 @@ async def _run_claims(app, claims) -> list[dict]:
                 "claim": claim,
                 "sub_questions": [t["question"] for t in final_state["threads"]],
                 "n_rounds": final_state["iteration"],
-                "rounds_detail": final_state["rounds"],  # full per-round audit trail
+                "rounds_detail": final_state["rounds"],
                 "gold_label": gold_label,
                 "predicted_label": verdict["label"],
                 "justification": verdict["justification"],
@@ -110,9 +118,14 @@ async def _run_claims(app, claims) -> list[dict]:
                 "invalid_citations": verdict.get("invalid_citations", []),
                 "correct": is_correct,
                 "n_evidence_used": len(all_evidence),
-                "evidence": all_evidence,  # flattened
+                "evidence": all_evidence,
                 "evidence_incomplete": was_forced,
                 "unresolved_questions": [t["question"] for t in final_state["threads"] if not t["resolved"]],
+                "total_tokens_used": final_state.get("total_tokens_used", 0),
+                "total_prompt_tokens": final_state.get("total_prompt_tokens", 0),
+                "total_completion_tokens": final_state.get("total_completion_tokens", 0),
+                "escalate": verdict.get("escalate", False),
+                "escalation_reasons": verdict.get("escalation_reasons", []),
             }
         )
 

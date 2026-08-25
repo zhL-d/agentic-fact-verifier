@@ -1,6 +1,5 @@
 """Manual test client for the synthesize_verdict MCP tool (judge_server.py).
 
-
 Usage:
     uv run scripts/call_judge.py 1 9 10
 """

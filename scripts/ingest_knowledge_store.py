@@ -14,7 +14,6 @@ import torch
 from elasticsearch import Elasticsearch, helpers
 from sentence_transformers import SentenceTransformer
 
-
 KNOWLEDGE_STORE_DIR = Path(__file__).parent.parent / "data" / "knowledge_store" / "dev"
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -34,7 +33,7 @@ def claim_already_indexed(es: Elasticsearch, claim_id: str) -> bool:
     return resp["count"] > 0
 
 
-TARGET_CHUNK_WORDS = 350  # approximates 256-512 tokens (~1.3 tokens/word for English)
+TARGET_CHUNK_WORDS = 350
 
 
 def normalize(sentence: str) -> str:

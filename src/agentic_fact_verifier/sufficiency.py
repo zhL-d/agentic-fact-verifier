@@ -60,7 +60,7 @@ _RESPONSE_FORMAT = schema_response_format(SufficiencyCheck, "SufficiencyCheck")
 
 
 def check_sufficiency(claim: str, threads: list[dict]) -> tuple[SufficiencyCheck, dict]:
-    """`threads` is a list of {"question": str, "evidence": list[dict]}, 
+    """`threads` is a list of {"question": str, "evidence": list[dict]},
     one per sub-question, each carrying only its own accumulated evidence.
 
     Returns (check, usage), usage is this call's token usage."""

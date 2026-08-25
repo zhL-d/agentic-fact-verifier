@@ -10,15 +10,15 @@ import os
 from elasticsearch import Elasticsearch
 
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_DIMS = 384  # matches sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_DIMS = 384
 
 MAPPING = {
     "properties": {
-        "claim_id": {"type": "keyword"},  # ALWAYS filter on this first
+        "claim_id": {"type": "keyword"},
         "url": {"type": "keyword"},
-        "text": {"type": "text"},  # BM25 keyword search
-        "source_type": {"type": "keyword"},  # provenance from original baseline's `type`
-        "source_query": {"type": "keyword"},  # provenance from original baseline's `query`
+        "text": {"type": "text"},
+        "source_type": {"type": "keyword"},
+        "source_query": {"type": "keyword"},
         "embedding": {
             "type": "dense_vector",
             "dims": EMBEDDING_DIMS,
@@ -34,7 +34,7 @@ def main():
 
     if not es.ping():
         raise SystemExit(
-            "Can't reach Elasticsearch at localhost:9200 — "
+            "Can't reach Elasticsearch at localhost:9200 "
             "is `docker compose up -d` running?"
         )
 

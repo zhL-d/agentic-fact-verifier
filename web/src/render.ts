@@ -109,9 +109,28 @@ function renderDocket(data: VerifyResponse): void {
   meta.appendChild(
     el("span", {}, [document.createTextNode("Sub-questions "), el("b", { text: String(data.threads.length) })])
   );
+  meta.appendChild(
+    el("span", {}, [
+      document.createTextNode("Tokens used "),
+      el("b", { text: verdict.total_tokens_used.toLocaleString() }),
+    ])
+  );
   header.appendChild(meta);
   header.appendChild(el("div", { class: "stamp" + (labelClass ? " " + labelClass : ""), text: verdict.label }));
   page.appendChild(header);
+
+  if (verdict.escalate) {
+    const banner = el("div", { class: "escalation-banner" });
+    banner.appendChild(
+      el("span", { class: "escalation-title", text: "⚠ Needs human review before this verdict is treated as final" })
+    );
+    const list = el("ul");
+    verdict.escalation_reasons.forEach((reason) => {
+      list.appendChild(el("li", { text: reason }));
+    });
+    banner.appendChild(list);
+    page.appendChild(banner);
+  }
 
   const findings = el("div", { class: "findings" });
   findings.appendChild(el("span", { class: "section-title", text: "Findings" }));
@@ -120,7 +139,6 @@ function renderDocket(data: VerifyResponse): void {
   findings.appendChild(findingsP);
   page.appendChild(findings);
 
-  // Result / trace toggle
   const trace = el("div", { class: "trace", hidden: "" });
   const btnOff = el("button", { class: "active", text: "Result only" });
   const btnOn = el("button", { text: "Show reasoning trace" });
@@ -172,6 +190,9 @@ function renderDocket(data: VerifyResponse): void {
         ];
         if (citeNumber !== undefined) {
           rowChildren.push(el("span", { class: "cited-badge", text: "Cited as [" + citeNumber + "]" }));
+        }
+        if (chunk.injection_markers && chunk.injection_markers.length > 0) {
+          rowChildren.push(el("span", { class: "injection-flag", text: "⚠ flagged" }));
         }
         rowChildren.push(el("span", { class: "chevron", text: "▶" }));
         const detail = el(

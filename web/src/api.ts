@@ -12,9 +12,7 @@ export async function fetchVerification(claimId: number): Promise<VerifyResponse
     try {
       const body = await res.json();
       detail = body.detail || detail;
-    } catch {
-    
-    }
+    } catch {}
     throw new Error(detail);
   }
   return res.json();

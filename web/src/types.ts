@@ -1,8 +1,10 @@
+// API response shapes shared across the frontend.
 
 export interface EvidenceChunk {
   text: string;
   url: string;
   retrieval_query: string;
+  injection_markers: string[];
 }
 
 export interface RoundThread {
@@ -38,6 +40,11 @@ export interface Verdict {
   invalid_citations: number[];
   n_evidence_available: number;
   cited_sources: CitedSource[];
+  escalate: boolean;
+  escalation_reasons: string[];
+  total_tokens_used: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
 }
 
 export interface VerifyResponse {

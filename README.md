@@ -1,10 +1,31 @@
 # Agentic Fact Verifier
 
+[![CI](https://github.com/zhL-d/agentic-fact-verifier/actions/workflows/ci.yml/badge.svg)](https://github.com/zhL-d/agentic-fact-verifier/actions/workflows/ci.yml)
+
 A general-purpose agentic fact-verification system: given a claim, it
 decomposes the claim into sub-questions, retrieves evidence per sub-question,
 dynamically decides whether it has enough evidence (re-querying with refined
 searches if not), and produces a verdict with citations traceable back to the
-exact evidence and sub-question they came from.
+exact evidence and sub-question they came from, flagging low-confidence
+verdicts for human review.
+
+**Key features:**
+
+- **Citation-grounded Verdicts**, every claimed fact in the justification
+  cites a specific, traceable evidence.
+- **Human-in-the-loop Escalation**, low-confidence verdicts are flagged
+  for review instead of silently published.
+- **Prompt-injection Defense**, retrieved web evidence is treated as 
+  untrusted data to evaluate, rather than instructions to follow.
+- **Context Compaction**, a capped, recency-based evidence budget per
+  sub-question keeps prompts from growing unbounded across retrieval
+  rounds.
+- **Cost/budget Guardrail**, a hard per-run token ceiling stops a
+  run from spending without bound.
+- **MCP tool auth**, every retrieval/verdict tool call requires a shared
+  secret, nothing is open to the network unauthenticated.
+- **Checkpointed & Resumable**, a crashed run resumes from its last
+  completed round instead of starting over.
 
 ![Demo: verifying a claim, then walking through the reasoning trace](demo.gif)
 
@@ -14,13 +35,15 @@ exact evidence and sub-question they came from.
 
 - **LangGraph**, orchestration; the verification pipeline is an explicit state machine, so retrieval rounds and control flow are decided dynamically per sub-question.
 - **RAG (Retrieval-Augmented Generation)**, the core pattern: every verdict is grounded in retrieved evidence with per-claim citations.
-- **MCP (Model Context Protocol)**, exposes retrieval and verdict synthesis as standard tools.
+- **MCP (Model Context Protocol)**, exposes retrieval and verdict synthesis as standard tools, auth-gated with a shared secret between containers.
 - **Elasticsearch**, hybrid BM25 + kNN retrieval powering the RAG layer.
-- **LangSmith**, observability: traces every LLM call and graph step end-to-end, so a verification run is full reasoning chain.
+- **PostgreSQL**, the checkpoint store behind crash-resumable runs (LangGraph's AsyncPostgresSaver).
+- **LangSmith**, observability: traces every LLM call and graph step end-to-end.
 - **FastAPI**, the API tier.
 - **TypeScript + Vite**, the frontend.
 - **Nginx**, reverse proxy; serves the built frontend and routes to the API tier.
-- **Docker Compose**, local orchestration across all five services.
+- **Docker Compose**, local orchestration across all six services.
+- **GitHub Actions**, CI: lint + tests for the backend, type-check + build for the frontend, on every push/PR to main.
 
 ### Deployment topology
 
@@ -28,20 +51,22 @@ exact evidence and sub-question they came from.
 flowchart LR
     Browser["Browser"]
     Nginx["nginx<br/>(:8000→80)<br/>serves web/dist/, proxies /api/*"]
-    ApiServer["api_server.py<br/>(FastAPI container, :8000<br/>internally, :8001 direct debug)<br/>API only, runs the LangGraph<br/>pipeline directly"]
+    ApiServer["api_server.py<br/>(FastAPI container, :8000<br/>internally, :8001 direct debug)<br/>API only, runs the LangGraph<br/>pipeline"]
     RetrievalServer["mcp_server.py<br/>(:8100)<br/>retrieve_evidence tool"]
     JudgeServer["judge_server.py<br/>(:8101)<br/>synthesize_verdict tool"]
-    ES[("Elasticsearch<br/>(own container, :9200)<br/>BM25 + kNN, per-claim")]
-    Fireworks["Nemotron-3-Ultra"]
+    ES[("Elasticsearch<br/>(:9200)<br/>BM25 + kNN, per-claim")]
+    LLM["LLM<br/>"]
+    Checkpoint[("Postgres<br/>(:5432)<br/>checkpoint state")]
 
     Browser -- "GET / (static assets)" --> Nginx
     Browser -- "POST /api/verify/:id" --> Nginx
     Nginx -- "proxy_pass /api/*" --> ApiServer
-    ApiServer -- "MCP over streamable-http:<br/>retrieve_evidence(claim_id, query)" --> RetrievalServer
+    ApiServer -- "MCP over streamable-http:<br/>retrieve_evidence(claim_id, query)<br/> shared secret auth" --> RetrievalServer
     RetrievalServer --> ES
-    ApiServer -- "decompose / sufficiency calls<br/>(direct, in-process)" --> Fireworks
-    ApiServer -- "MCP over streamable-http:<br/>synthesize_verdict(claim,<br/>evidence, sub_findings)" --> JudgeServer
-    JudgeServer -- "verdict call" --> Fireworks
+    ApiServer -- "decompose / sufficiency calls<br/>" --> LLM
+    ApiServer -- "MCP over streamable-http:<br/>synthesize_verdict(claim,<br/>evidence, sub_findings)<br/> shared secret auth" --> JudgeServer
+    JudgeServer -- "verdict call" --> LLM
+    ApiServer -- "read/write run state" --> Checkpoint
 ```
 
 ### Verification state machine
@@ -51,10 +76,11 @@ stateDiagram-v2
     [*] --> decompose
     decompose --> retrieve: split claim into sub-questions,<br/>each its own evidence "thread"
     retrieve --> check_sufficiency: accumulate evidence per thread
-    check_sufficiency --> retrieve: any thread unresolved<br/>(refined queries, that thread only)
-    check_sufficiency --> verdict: all resolved,<br/>or 3-round cap hit
+    check_sufficiency --> retrieve: any thread unresolved<br/>(refined queries)
+    check_sufficiency --> verdict: all resolved, 3-round cap hit,<br/>or token budget exceeded
     verdict --> [*]: label + justification +<br/>citations, synthesized from<br/>per-thread findings
 ```
+
 ## Usage
 
 ### Prerequisites
@@ -80,8 +106,17 @@ data lives on the host either way, no need to copy it anywhere else.
 **2. Configure environment.** Create `.env` in the repo root:
 
 ```
-FIREWORKS_API_KEY=...
-# optional — LangSmith tracing
+OPENAI_API_KEY=...                             # default provider
+# LLM_PROVIDER=openai                          # optional, "openai" is already the default
+# OPENAI_MODEL=gpt-5.6-terra                    # optional, this is already the default
+MCP_SHARED_SECRET=...                          # any random string; auths api_server to
+                                                # mcp_server/judge_server (generate one with
+                                                # `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`)
+# POSTGRES_USER=afv
+# POSTGRES_PASSWORD=afv
+# POSTGRES_DB=afv_checkpoints
+
+# optional, LangSmith tracing
 LANGSMITH_TRACING=true
 LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com
 LANGSMITH_API_KEY=                            # a Service Key
@@ -99,10 +134,11 @@ VERDICT_LABELS=Supported,Refuted,Not Enough Evidence,Conflicting Evidence/Cherry
 docker compose up -d --build
 ```
 
-This builds and starts all five services: `elasticsearch`, `mcp_server`
-(retrieval, port 8100), `judge_server` (verdict synthesis, port 8101),
-`api_server` (API only, port 8001 for direct debugging), and `nginx` (port 8000,
-the actual entry point; serves the built frontend and proxies `/api/*` to
+This builds and starts all six services: `elasticsearch`, `postgres`
+(checkpoint state, port 5432), `mcp_server` (retrieval, port 8100),
+`judge_server` (verdict synthesis, port 8101), `api_server` (API only,
+port 8001 for direct debugging), and `nginx` (port 8000, the actual entry
+point; serves the built frontend and proxies `/api/*` to
 `api_server`). Optionally add `--build-arg BAKE_MODEL_WEIGHTS=true` to pre-fetch
 the embedding model at build time instead of on `mcp_server`'s first request
 (bigger image, no first-request download).
@@ -145,3 +181,42 @@ verdict with clickable citations back to the exact evidence.
 
 Nothing else needs to change, `docker compose up -d --build` and the rest of
 Setup above work identically once the two env vars point at your data.
+
+### Running tests
+
+```bash
+uv run pytest tests/
+```
+
+Runs automatically on every push/PR to main via **GitHub Actions**
+(`.github/workflows/ci.yml`), lint (`ruff`) and test suite for the
+backend, a type-check + build for the frontend.
+
+## Evaluation
+
+Ran a small batch (n=10 AVeriTeC claims,same claims and same model, GPT-5.6 Terra throughout) 
+aimed at validating mechanisms. Each finding states its own
+sample size; none of these are proof, they're directional signal at small scale.
+
+**Query-refinement effectiveness.** When a sub-question isn't resolved,
+the system re-queries with a refined search rather than repeating the
+same one. Of 44 refined-query events across the batch, all 44 (100%)
+surfaced at least one evidence chunk the thread hadn't already seen.
+
+**Escalation calibration.** A verdict is flagged for human review when a
+sub-question never resolved, the point of the flag is
+that it should track real uncertainty, not fire arbitrarily. In this
+batch, flagged verdicts (n=7) scored 14.3% accuracy against gold labels;
+unflagged verdicts (n=3) scored 100%. That's the intended pattern, 
+directionally consistent with the flag meaning something, but n=7/n=3 is
+too small to call this validated.
+
+**Context compaction impact.** Capping each sub-question's accumulated
+evidence at a budget (keeping the most recent chunks) cut
+evidence volume by 57.4% (chunks) and 60.9% (characters) against an
+uncapped run on the same 10 claims. Verdicts agreed between the capped and
+uncapped runs on 7/10 claims and disagreed on 3, so compaction is not a
+free no-op, it does occasionally change the final label by discarding
+evidence the uncapped run still had.
+
+Methodology: `scripts/run_compaction_comparison.py`.

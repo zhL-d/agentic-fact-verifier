@@ -28,6 +28,7 @@ services:
       - ES_INDEX_NAME=${ES_INDEX_NAME:-averitec_dev_chunks}
       - MCP_SERVER_HOST=0.0.0.0
       - MCP_SERVER_PORT=8100
+      - MCP_SHARED_SECRET=${MCP_SHARED_SECRET}
     ports:
       - "8100:8100"
     depends_on:
@@ -47,9 +48,13 @@ services:
     command: ["uv", "run", "python", "src/agentic_fact_verifier/judge_server.py"]
     environment:
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
       - VERDICT_LABELS=${VERDICT_LABELS:-}
       - JUDGE_SERVER_HOST=0.0.0.0
       - JUDGE_SERVER_PORT=8101
+      - MCP_SHARED_SECRET=${MCP_SHARED_SECRET}
     ports:
       - "8101:8101"
     healthcheck:
@@ -62,19 +67,25 @@ services:
     build:
       context: .
       target: app
-    command: ["uv", "run", "uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uv", "run", "uvicorn", "agentic_fact_verifier.api_server:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
       - MCP_SERVER_URL=http://mcp_server:8100/mcp
       - JUDGE_SERVER_URL=http://judge_server:8101/mcp
+      - MCP_SHARED_SECRET=${MCP_SHARED_SECRET}
       - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
       - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-}
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
       - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-}
+      - CHECKPOINT_DB_PATH=/app/checkpoints/checkpoints.sqlite
     ports:
-      - "8001:8000" 
+      - "8001:8000"
     volumes:
       - ./data:/app/data:ro # dev.json + knowledge store, gitignored, host-provided
+      - checkpoint_data:/app/checkpoints # LangGraph run state, survives container restarts
     depends_on:
       mcp_server:
         condition: service_healthy
@@ -98,3 +109,4 @@ services:
 
 volumes:
   es_data:
+  checkpoint_data:

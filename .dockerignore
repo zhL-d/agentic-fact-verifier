@@ -10,3 +10,5 @@ data/knowledge_store
 eval
 .env
 *.key
+tests
+.pytest_cache

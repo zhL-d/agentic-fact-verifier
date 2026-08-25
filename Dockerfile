@@ -27,18 +27,17 @@ ENV HF_HOME=/app/.cache/huggingface
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --no-dev
 
 COPY src/ src/
 COPY scripts/ scripts/
-COPY api_server.py ./
 
 ARG BAKE_MODEL_WEIGHTS=false
 RUN if [ "$BAKE_MODEL_WEIGHTS" = "true" ]; then \
       uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"; \
     fi
 
-RUN chown -R appuser:appuser /app
+RUN mkdir -p /app/checkpoints && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000 8100 8101

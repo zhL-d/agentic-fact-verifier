@@ -1,25 +1,26 @@
 """API server for the agentic fact verifier.
 
 Run:
-    uv run uvicorn api_server:app --reload --port 8000
+    uv run uvicorn agentic_fact_verifier.api_server:app --reload --port 8000 --app-dir src
 """
 
 import json
-import sys
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+from agentic_fact_verifier.graph import build_graph, run_or_resume
+from agentic_fact_verifier.mcp_client import mcp_judge_session, mcp_retrieval_session
 
-from agentic_fact_verifier.graph import build_graph, run_verification  # noqa: E402
-from agentic_fact_verifier.mcp_client import mcp_judge_session, mcp_retrieval_session  # noqa: E402
-
-DEV_JSON = Path(__file__).parent / "data" / "raw" / "dev.json"
+DEV_JSON = Path(__file__).parent.parent.parent / "data" / "raw" / "dev.json"
 _claims = json.loads(DEV_JSON.read_text())
 
 CURATED_CLAIM_IDS = [0, 1, 6, 9, 10, 13]
+
+CHECKPOINT_DB_PATH = os.environ.get("CHECKPOINT_DB_PATH", "checkpoints.sqlite")
 
 app = FastAPI()
 
@@ -39,11 +40,16 @@ async def verify(claim_id: int):
     if not (0 <= claim_id < len(_claims)):
         raise HTTPException(404, f"claim_id {claim_id} out of range (0-{len(_claims) - 1})")
     entry = _claims[claim_id]
+    config = {"configurable": {"thread_id": str(claim_id)}}
 
     try:
-        async with mcp_retrieval_session() as retrieve_tool, mcp_judge_session() as judge_tool:
-            graph_app = build_graph(retrieve_tool, judge_tool)
-            final_state = await run_verification(graph_app, entry["claim"], str(claim_id))
+        async with (
+            mcp_retrieval_session() as retrieve_tool,
+            mcp_judge_session() as judge_tool,
+            AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as checkpointer,
+        ):
+            graph_app = build_graph(retrieve_tool, judge_tool, checkpointer=checkpointer)
+            final_state = await run_or_resume(graph_app, entry["claim"], str(claim_id), config)
     except Exception as e:
         raise HTTPException(502, f"Pipeline run failed: {e}") from e
 

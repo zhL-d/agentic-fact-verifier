@@ -1,0 +1,208 @@
+[
+  {
+    "claim_id": "0",
+    "claim": "In a letter to Steve Jobs, Sean Connery refused to appear in an apple commercial.",
+    "sub_questions": [
+      "Is there an authentic letter from Sean Connery addressed to Steve Jobs concerning an Apple advertising proposal?",
+      "What does the purported Sean Connery letter to Steve Jobs say about appearing in an Apple commercial?",
+      "Do reliable contemporary or archival sources corroborate that Apple sought to cast Sean Connery in a commercial and that Connery declined?"
+    ],
+    "n_rounds": 1,
+    "rounds_detail": [
+      {
+        "round": 1,
+        "threads": [
+          {
+            "question": "Is there an authentic letter from Sean Connery addressed to Steve Jobs concerning an Apple advertising proposal?",
+            "queries_used": [
+              "Sean Connery letter to Steve Jobs Apple advertising proposal"
+            ],
+            "new_evidence": [
+              {
+                "claim_id": "0",
+                "url": "https://www.dailymail.co.uk/news/article-2006317/Sean-Connery-letter-Steve-Jobs-rejecting-offer-appear-Apple-ad-revealed-fake.html",
+                "text": "'I am f****** James Bond': Sean Connery letter to Steve Jobs rejecting offer to appear in Apple ad revealed to be fake Thousands of James Bond fans were today taken in by a spoof letter from Sean Conney to Apple boss Steve Jobs in which the film star launches a rant at the computer chief. The faked A4 letter on 007 paper was published online claiming to have been a response from Connery to a request to feature in an advert for Apple. It purportedly shows Connery aggressively declining the offer and telling Jobs 'You are a computer salesman - I am f****** James Bond.' Do you know who I am? A faked letter from James Bond star Sir Sean Connery firmly rejected an apparent advertising role from Apple chief Steve Jobs The letter caused a sensation when it was published on Twitter today with thousands of users believing it to be real. Dated December 1998, it is addressed to Mr Stephen P. Jobs at '1 Infinite Loop, Cupertino, California'. The prankster writes: 'I will say this one more time. Yo do understand English, don't you? I do not sell my soul for Apple or any other company. 'I have no interest in ''changing the world'' as you suggest. You have nothing that I need or want. You are a computer salesman - I am f****** James Bond. 'I can think of no quicker way to destroy my career than to appear in one of your crass adverts. Please do not contact me again.' The person claiming to be the 007 star then signs off with a signature on paper that is headed 'The desk of Sean Connery' and features a 007 gun symbol in the bottom corner. Spoof: The faked letter claims to be from the 'desk of Sean Connery' and is typed on paper with the 007 symbol in the corner The Apple satirical site Scoopertino initially published the fake letter on June 19. They claim that Jobs has been a life-long Bond fan who wanted to call the first computer the Double-O-Mac.",
+                "source_type": "question_duplicate",
+                "source_query": "Sean Connery refusal letter Steve Jobs apple commercial",
+                "injection_markers": [],
+                "retrieval_query": "Sean Connery letter to Steve Jobs Apple advertising proposal"
+              },
+              {
+                "claim_id": "0",
+                "url": "https://www.mi6-hq.com/news/index.php?itemid=9532",
+                "text": "Fake Sean Connery / Steve Jobs letter becomes top Twitter trending topic A 'letter' from Sean Connery to Steve Jobs was a top trending topic on Twitter today thanks to an unwitting tweet from a marketing executive who thought it was genuine. The phony letter, in which 'Connery' uses some salty language to rebuke approaches from 'Jobs' to advertise his Apple products was tweeted seriously by John Willshire and was quickly picked up by thousands, many of whom did not get the joke either. The fake Connery wrote: \"I have no interest in 'changing the world' as you suggest. You have nothing that I need or want. You are a computer salesman - I am fucking JAMES BOND!\" originally published the joke letter on Sunday as part of a satirical look back to Apple's marketing concerns in 1998. The fake advertisement used in the article is actually a Photoshopped version of a real Connery print ad for Jim Beam bourbon",
+                "source_type": "question_duplicate",
+                "source_query": "Understanding the claim about Sean Connery and Apple commercial",
+                "injection_markers": [],
+                "retrieval_query": "Sean Connery letter to Steve Jobs Apple advertising proposal"
+              },
+              {
+                "claim_id": "0",
+                "url": "https://www.businessinsider.com/james-bond-sean-connery-steve-jobs-apple-letter-2011-6",
+                "text": "This is a letter Sean Connery wrote didn't write in response to Steve Jobs after being asked to appear in an Apple ad. Honestly, we're not sure it's legit. The \"007\" at the bottom-right corner and the \"I am fucking JAMES BOND\" seem a bit rich. But it's still hilarious. And it's refreshing to see someone respond to Steve Jobs with something other than fawning, drooling admiration. Update: Yep, it's fake. It comes from Scoopertino, The-Onion-for-Apple-news. Thanks Brian Manley! Don't Miss: 11 Tools To Get Your Startup Off The Ground In No Time \u2192",
+                "source_type": "question_duplicate",
+                "source_query": "Background information on Sean Connery's involvement with Apple",
+                "injection_markers": [],
+                "retrieval_query": "Sean Connery letter to Steve Jobs Apple advertising proposal"
+              }
+            ],
+            "n_new_evidence": 3,
+            "resolved": true,
+            "reasoning": "Multiple independent reports identify the purported letter as a Scoopertino satire/fake, sufficient to answer that no authentic letter is established."
+          },
+          {
+            "question": "What does the purported Sean Connery letter to Steve Jobs say about appearing in an Apple commercial?",
+            "queries_used": [
+              "\"Sean Connery\" \"Steve Jobs\" \"apple commercial\" letter"
+            ],
+            "new_evidence": [
+              {
+                "claim_id": "0",
+                "url": "https://www.dailymail.co.uk/news/article-2006317/Sean-Connery-letter-Steve-Jobs-rejecting-offer-appear-Apple-ad-revealed-fake.html",
+                "text": "'I am f****** James Bond': Sean Connery letter to Steve Jobs rejecting offer to appear in Apple ad revealed to be fake Thousands of James Bond fans were today taken in by a spoof letter from Sean Conney to Apple boss Steve Jobs in which the film star launches a rant at the computer chief. The faked A4 letter on 007 paper was published online claiming to have been a response from Connery to a request to feature in an advert for Apple. It purportedly shows Connery aggressively declining the offer and telling Jobs 'You are a computer salesman - I am f****** James Bond.' Do you know who I am? A faked letter from James Bond star Sir Sean Connery firmly rejected an apparent advertising role from Apple chief Steve Jobs The letter caused a sensation when it was published on Twitter today with thousands of users believing it to be real. Dated December 1998, it is addressed to Mr Stephen P. Jobs at '1 Infinite Loop, Cupertino, California'. The prankster writes: 'I will say this one more time. Yo do understand English, don't you? I do not sell my soul for Apple or any other company. 'I have no interest in ''changing the world'' as you suggest. You have nothing that I need or want. You are a computer salesman - I am f****** James Bond. 'I can think of no quicker way to destroy my career than to appear in one of your crass adverts. Please do not contact me again.' The person claiming to be the 007 star then signs off with a signature on paper that is headed 'The desk of Sean Connery' and features a 007 gun symbol in the bottom corner. Spoof: The faked letter claims to be from the 'desk of Sean Connery' and is typed on paper with the 007 symbol in the corner The Apple satirical site Scoopertino initially published the fake letter on June 19. They claim that Jobs has been a life-long Bond fan who wanted to call the first computer the Double-O-Mac.",
+                "source_type": "question_duplicate",
+                "source_query": "Sean Connery refusal letter Steve Jobs apple commercial",
+                "injection_markers": [],
+                "retrieval_query": "\"Sean Connery\" \"Steve Jobs\" \"apple commercial\" letter"
+              },
+              {
+                "claim_id": "0",
+                "url": "https://www.mi6-hq.com/news/index.php?itemid=9532",
+                "text": "Fake Sean Connery / Steve Jobs letter becomes top Twitter trending topic A 'letter' from Sean Connery to Steve Jobs was a top trending topic on Twitter today thanks to an unwitting tweet from a marketing executive who thought it was genuine. The phony letter, in which 'Connery' uses some salty language to rebuke approaches from 'Jobs' to advertise his Apple products was tweeted seriously by John Willshire and was quickly picked up by thousands, many of whom did not get the joke either. The fake Connery wrote: \"I have no interest in 'changing the world' as you suggest. You have nothing that I need or want. You are a computer salesman - I am fucking JAMES BOND!\" originally published the joke letter on Sunday as part of a satirical look back to Apple's marketing concerns in 1998. The fake advertisement used in the article is actually a Photoshopped version of a real Connery print ad for Jim Beam bourbon",
+                "source_type": "question_duplicate",
+                "source_query": "Understanding the claim about Sean Connery and Apple commercial",
+                "injection_markers": [],
+                "retrieval_query": "\"Sean Connery\" \"Steve Jobs\" \"apple commercial\" letter"
+              },
+              {
+                "claim_id": "0",
+                "url": "https://www.businessinsider.com/james-bond-sean-connery-steve-jobs-apple-letter-2011-6",
+                "text": "This is a letter Sean Connery wrote didn't write in response to Steve Jobs after being asked to appear in an Apple ad. Honestly, we're not sure it's legit. The \"007\" at the bottom-right corner and the \"I am fucking JAMES BOND\" seem a bit rich. But it's still hilarious. And it's refreshing to see someone respond to Steve Jobs with something other than fawning, drooling admiration. Update: Yep, it's fake. It comes from Scoopertino, The-Onion-for-Apple-news. Thanks Brian Manley! Don't Miss: 11 Tools To Get Your Startup Off The Ground In No Time \u2192",
+                "source_type": "question_duplicate",
+                "source_query": "Background information on Sean Connery's involvement with Apple",
+                "injection_markers": [],
+                "retrieval_query": "\"Sean Connery\" \"Steve Jobs\" \"apple commercial\" letter"
+              }
+            ],
+            "n_new_evidence": 3,
+            "resolved": true,
+            "reasoning": "The evidence directly quotes the purported letter saying Connery had no interest and that appearing in an Apple advert would destroy his career."
+          },
+          {
+            "question": "Do reliable contemporary or archival sources corroborate that Apple sought to cast Sean Connery in a commercial and that Connery declined?",
+            "queries_used": [
+              "Apple sought Sean Connery commercial declined Steve Jobs"
+            ],
+            "new_evidence": [
+              {
+                "claim_id": "0",
+                "url": "https://web.archive.org/web/20201129141238/https://scoopertino.com/exposed-the-imac-disaster-that-almost-was/",
+                "text": "San Francisco, CA \u2014 It\u2019s easy to appreciate iMac\u2019s place in Apple history today. In fact, Apple\u2019s concerns over the brand-new computer\u2019s viability had the company scrambling. The surprising story comes to light in iMaculate Conception: How Apple\u2019s iMac Was Born, a new book from former Apple marketing executive, Frederica Woods. As Ms. Woods spins the tale, it was just weeks before iMac\u2019s first Christmas in 1998 when slowing holiday sales rang the alarm in the CEO\u2019s office. Steve Jobs, a lifelong fan of James Bond (he\u2019d originally wanted to name the revolutionary computer \u201cDouble-O-Mac\u201d), instructed his agency to begin work on a special celebrity Christmas ad featuring 007 himself, Sean Connery \u2014 even though Connery had yet to be signed. \u201cThe ad was of dubious quality, clearly not one of the agency\u2019s finer moments,\u201d says Woods. Though Steve had a thing for Sean Connery, the feeling was not mutual. Connery was appalled by the \u201cadvert\u201d Jobs sent across the pond and declined to participate in the misadventure on at least three separate occasions. Connery\u2019s final rejection was accompanied by a note revealing one mightily peeved film star (see letter on right). Needless to say, iMac managed to \u201csurvive\u201d without extraordinary measures. iMaculate Conception reveals a number of other interesting iMac-related stories. Ms. Woods details the true origin of the failed \u201chockey-puck mouse\u201ddesign \u2014 a burnt English muffin. She also tells the heart-thumping tale of Jony Ive\u2019s hernia, suffered when he attempted to actually pick up an iMac by its handle. The book will be available at Barnes & Noble and other stores on June 27th. Pingback: Une fausse lettre de James Bond \u00e0 Apple | Belgium iPhone Pingback: JamesBondAuction.co.uk \u2013 James Bond 007 \u00bb Archive \u00bb Fake Sean Connery / Steve Jobs letter becomes top Twitter trending topic Pingback: Quick Look: l\u2019iMac di 007 - TheAppleLounge Pingback: James Bond Tears Steve Jobs a New One Over iMac Ad - 1998 | THE SILVER THREAD Pingback: Carta de Sean Connery a Steve Jobs \u2014 Tecnoculto Pingback: Sean Connery cs\u00fany\u00e1n besz\u00f3lt az Apple-nek? | Urban Legends",
+                "source_type": "gold",
+                "source_query": "_",
+                "injection_markers": [],
+                "retrieval_query": "Apple sought Sean Connery commercial declined Steve Jobs"
+              },
+              {
+                "claim_id": "0",
+                "url": "https://www.mi6-hq.com/news/index.php?itemid=9532",
+                "text": "Fake Sean Connery / Steve Jobs letter becomes top Twitter trending topic A 'letter' from Sean Connery to Steve Jobs was a top trending topic on Twitter today thanks to an unwitting tweet from a marketing executive who thought it was genuine. The phony letter, in which 'Connery' uses some salty language to rebuke approaches from 'Jobs' to advertise his Apple products was tweeted seriously by John Willshire and was quickly picked up by thousands, many of whom did not get the joke either. The fake Connery wrote: \"I have no interest in 'changing the world' as you suggest. You have nothing that I need or want. You are a computer salesman - I am fucking JAMES BOND!\" originally published the joke letter on Sunday as part of a satirical look back to Apple's marketing concerns in 1998. The fake advertisement used in the article is actually a Photoshopped version of a real Connery print ad for Jim Beam bourbon",
+                "source_type": "question_duplicate",
+                "source_query": "Understanding the claim about Sean Connery and Apple commercial",
+                "injection_markers": [],
+                "retrieval_query": "Apple sought Sean Connery commercial declined Steve Jobs"
+              },
+              {
+                "claim_id": "0",
+                "url": "https://www.dailymail.co.uk/news/article-2006317/Sean-Connery-letter-Steve-Jobs-rejecting-offer-appear-Apple-ad-revealed-fake.html",
+                "text": "'I am f****** James Bond': Sean Connery letter to Steve Jobs rejecting offer to appear in Apple ad revealed to be fake Thousands of James Bond fans were today taken in by a spoof letter from Sean Conney to Apple boss Steve Jobs in which the film star launches a rant at the computer chief. The faked A4 letter on 007 paper was published online claiming to have been a response from Connery to a request to feature in an advert for Apple. It purportedly shows Connery aggressively declining the offer and telling Jobs 'You are a computer salesman - I am f****** James Bond.' Do you know who I am? A faked letter from James Bond star Sir Sean Connery firmly rejected an apparent advertising role from Apple chief Steve Jobs The letter caused a sensation when it was published on Twitter today with thousands of users believing it to be real. Dated December 1998, it is addressed to Mr Stephen P. Jobs at '1 Infinite Loop, Cupertino, California'. The prankster writes: 'I will say this one more time. Yo do understand English, don't you? I do not sell my soul for Apple or any other company. 'I have no interest in ''changing the world'' as you suggest. You have nothing that I need or want. You are a computer salesman - I am f****** James Bond. 'I can think of no quicker way to destroy my career than to appear in one of your crass adverts. Please do not contact me again.' The person claiming to be the 007 star then signs off with a signature on paper that is headed 'The desk of Sean Connery' and features a 007 gun symbol in the bottom corner. Spoof: The faked letter claims to be from the 'desk of Sean Connery' and is typed on paper with the 007 symbol in the corner The Apple satirical site Scoopertino initially published the fake letter on June 19. They claim that Jobs has been a life-long Bond fan who wanted to call the first computer the Double-O-Mac.",
+                "source_type": "question_duplicate",
+                "source_query": "Sean Connery refusal letter Steve Jobs apple commercial",
+                "injection_markers": [],
+                "retrieval_query": "Apple sought Sean Connery commercial declined Steve Jobs"
+              }
+            ],
+            "n_new_evidence": 3,
+            "resolved": true,
+            "reasoning": "The available evidence identifies the underlying story as a Scoopertino satire and supplies no reliable contemporary or archival corroboration, sufficient to conclude the asserted corroboration is absent."
+          }
+        ]
+      }
+    ],
+    "gold_label": "Refuted",
+    "predicted_label": "Refuted",
+    "justification": "The purported letter in which Connery rejects an Apple advertising role was a Scoopertino satire/fake, rather than an authentic letter from Connery to Jobs.[1][2][3] Although the fake text says that appearing in an Apple advert would destroy his career, available evidence provides no reliable contemporaneous or archival corroboration that Apple made such an offer or that Connery declined it.[1][4]",
+    "citations": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "cited_sources": [
+      {
+        "citation_number": 1,
+        "url": "https://www.dailymail.co.uk/news/article-2006317/Sean-Connery-letter-Steve-Jobs-rejecting-offer-appear-Apple-ad-revealed-fake.html"
+      },
+      {
+        "citation_number": 2,
+        "url": "https://www.mi6-hq.com/news/index.php?itemid=9532"
+      },
+      {
+        "citation_number": 3,
+        "url": "https://www.businessinsider.com/james-bond-sean-connery-steve-jobs-apple-letter-2011-6"
+      },
+      {
+        "citation_number": 4,
+        "url": "https://web.archive.org/web/20201129141238/https://scoopertino.com/exposed-the-imac-disaster-that-almost-was/"
+      }
+    ],
+    "invalid_citations": [],
+    "correct": true,
+    "n_evidence_used": 4,
+    "evidence": [
+      {
+        "claim_id": "0",
+        "url": "https://www.dailymail.co.uk/news/article-2006317/Sean-Connery-letter-Steve-Jobs-rejecting-offer-appear-Apple-ad-revealed-fake.html",
+        "text": "'I am f****** James Bond': Sean Connery letter to Steve Jobs rejecting offer to appear in Apple ad revealed to be fake Thousands of James Bond fans were today taken in by a spoof letter from Sean Conney to Apple boss Steve Jobs in which the film star launches a rant at the computer chief. The faked A4 letter on 007 paper was published online claiming to have been a response from Connery to a request to feature in an advert for Apple. It purportedly shows Connery aggressively declining the offer and telling Jobs 'You are a computer salesman - I am f****** James Bond.' Do you know who I am? A faked letter from James Bond star Sir Sean Connery firmly rejected an apparent advertising role from Apple chief Steve Jobs The letter caused a sensation when it was published on Twitter today with thousands of users believing it to be real. Dated December 1998, it is addressed to Mr Stephen P. Jobs at '1 Infinite Loop, Cupertino, California'. The prankster writes: 'I will say this one more time. Yo do understand English, don't you? I do not sell my soul for Apple or any other company. 'I have no interest in ''changing the world'' as you suggest. You have nothing that I need or want. You are a computer salesman - I am f****** James Bond. 'I can think of no quicker way to destroy my career than to appear in one of your crass adverts. Please do not contact me again.' The person claiming to be the 007 star then signs off with a signature on paper that is headed 'The desk of Sean Connery' and features a 007 gun symbol in the bottom corner. Spoof: The faked letter claims to be from the 'desk of Sean Connery' and is typed on paper with the 007 symbol in the corner The Apple satirical site Scoopertino initially published the fake letter on June 19. They claim that Jobs has been a life-long Bond fan who wanted to call the first computer the Double-O-Mac.",
+        "source_type": "question_duplicate",
+        "source_query": "Sean Connery refusal letter Steve Jobs apple commercial",
+        "injection_markers": [],
+        "retrieval_query": "Sean Connery letter to Steve Jobs Apple advertising proposal"
+      },
+      {
+        "claim_id": "0",
+        "url": "https://www.mi6-hq.com/news/index.php?itemid=9532",
+        "text": "Fake Sean Connery / Steve Jobs letter becomes top Twitter trending topic A 'letter' from Sean Connery to Steve Jobs was a top trending topic on Twitter today thanks to an unwitting tweet from a marketing executive who thought it was genuine. The phony letter, in which 'Connery' uses some salty language to rebuke approaches from 'Jobs' to advertise his Apple products was tweeted seriously by John Willshire and was quickly picked up by thousands, many of whom did not get the joke either. The fake Connery wrote: \"I have no interest in 'changing the world' as you suggest. You have nothing that I need or want. You are a computer salesman - I am fucking JAMES BOND!\" originally published the joke letter on Sunday as part of a satirical look back to Apple's marketing concerns in 1998. The fake advertisement used in the article is actually a Photoshopped version of a real Connery print ad for Jim Beam bourbon",
+        "source_type": "question_duplicate",
+        "source_query": "Understanding the claim about Sean Connery and Apple commercial",
+        "injection_markers": [],
+        "retrieval_query": "Sean Connery letter to Steve Jobs Apple advertising proposal"
+      },
+      {
+        "claim_id": "0",
+        "url": "https://www.businessinsider.com/james-bond-sean-connery-steve-jobs-apple-letter-2011-6",
+        "text": "This is a letter Sean Connery wrote didn't write in response to Steve Jobs after being asked to appear in an Apple ad. Honestly, we're not sure it's legit. The \"007\" at the bottom-right corner and the \"I am fucking JAMES BOND\" seem a bit rich. But it's still hilarious. And it's refreshing to see someone respond to Steve Jobs with something other than fawning, drooling admiration. Update: Yep, it's fake. It comes from Scoopertino, The-Onion-for-Apple-news. Thanks Brian Manley! Don't Miss: 11 Tools To Get Your Startup Off The Ground In No Time \u2192",
+        "source_type": "question_duplicate",
+        "source_query": "Background information on Sean Connery's involvement with Apple",
+        "injection_markers": [],
+        "retrieval_query": "Sean Connery letter to Steve Jobs Apple advertising proposal"
+      },
+      {
+        "claim_id": "0",
+        "url": "https://web.archive.org/web/20201129141238/https://scoopertino.com/exposed-the-imac-disaster-that-almost-was/",
+        "text": "San Francisco, CA \u2014 It\u2019s easy to appreciate iMac\u2019s place in Apple history today. In fact, Apple\u2019s concerns over the brand-new computer\u2019s viability had the company scrambling. The surprising story comes to light in iMaculate Conception: How Apple\u2019s iMac Was Born, a new book from former Apple marketing executive, Frederica Woods. As Ms. Woods spins the tale, it was just weeks before iMac\u2019s first Christmas in 1998 when slowing holiday sales rang the alarm in the CEO\u2019s office. Steve Jobs, a lifelong fan of James Bond (he\u2019d originally wanted to name the revolutionary computer \u201cDouble-O-Mac\u201d), instructed his agency to begin work on a special celebrity Christmas ad featuring 007 himself, Sean Connery \u2014 even though Connery had yet to be signed. \u201cThe ad was of dubious quality, clearly not one of the agency\u2019s finer moments,\u201d says Woods. Though Steve had a thing for Sean Connery, the feeling was not mutual. Connery was appalled by the \u201cadvert\u201d Jobs sent across the pond and declined to participate in the misadventure on at least three separate occasions. Connery\u2019s final rejection was accompanied by a note revealing one mightily peeved film star (see letter on right). Needless to say, iMac managed to \u201csurvive\u201d without extraordinary measures. iMaculate Conception reveals a number of other interesting iMac-related stories. Ms. Woods details the true origin of the failed \u201chockey-puck mouse\u201ddesign \u2014 a burnt English muffin. She also tells the heart-thumping tale of Jony Ive\u2019s hernia, suffered when he attempted to actually pick up an iMac by its handle. The book will be available at Barnes & Noble and other stores on June 27th. Pingback: Une fausse lettre de James Bond \u00e0 Apple | Belgium iPhone Pingback: JamesBondAuction.co.uk \u2013 James Bond 007 \u00bb Archive \u00bb Fake Sean Connery / Steve Jobs letter becomes top Twitter trending topic Pingback: Quick Look: l\u2019iMac di 007 - TheAppleLounge Pingback: James Bond Tears Steve Jobs a New One Over iMac Ad - 1998 | THE SILVER THREAD Pingback: Carta de Sean Connery a Steve Jobs \u2014 Tecnoculto Pingback: Sean Connery cs\u00fany\u00e1n besz\u00f3lt az Apple-nek? | Urban Legends",
+        "source_type": "gold",
+        "source_query": "_",
+        "injection_markers": [],
+        "retrieval_query": "Apple sought Sean Connery commercial declined Steve Jobs"
+      }
+    ],
+    "evidence_incomplete": false,
+    "unresolved_questions": [],
+    "total_tokens_used": 6444,
+    "total_prompt_tokens": 6058,
+    "total_completion_tokens": 386,
+    "escalate": false,
+    "escalation_reasons": []
+  }
+]

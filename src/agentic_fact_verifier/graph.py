@@ -1,12 +1,4 @@
-"""LangGraph orchestration the evidence sufficiency loop.
-
-Agentic, the number of retrieval rounds isn't fixed in advance, 
-it's decided dynamically by the sufficiency check,  
-with the search strategy actually changing between rounds (refined queries, not identical retries).
-
-Each sub-question is tracked as its own "thread", its own accumulated
-evidence, its own resolved/reasoning state, its own pending queries. This
-is what makes the audit trail.
+"""LangGraph orchestration of the evidence sufficiency loop.
 
 Graph shape:
     decompose -> retrieve -> check_sufficiency -[any thread unresolved]-> retrieve (loop)
@@ -15,6 +7,7 @@ Graph shape:
 """
 
 import json
+import os
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -22,15 +15,23 @@ from langgraph.graph import END, StateGraph
 from agentic_fact_verifier.decomposition import decompose_claim
 from agentic_fact_verifier.sufficiency import check_sufficiency
 
-MAX_ITERATIONS = 3  # hard cap, bounds cost/latency
+MAX_ITERATIONS = 3
+MAX_TOKENS_PER_RUN = int(os.environ.get("MAX_TOKENS_PER_RUN", "150000"))
+MAX_EVIDENCE_CHARS_PER_THREAD = int(os.environ.get("MAX_EVIDENCE_CHARS_PER_THREAD", "8000"))
+
+ESCALATION_LABELS = {
+    label.strip()
+    for label in os.environ.get(
+        "ESCALATION_LABELS", "Not Enough Evidence,Conflicting Evidence/Cherrypicking"
+    ).split(",")
+    if label.strip()
+}
 
 
 class Thread(TypedDict):
-    question: str  # the ORIGINAL sub-question, stable across rounds,
-    # never rewritten (only queries_to_run changes round to round)
-    queries_to_run: list[str]  # queries pending for the NEXT retrieve
-    # round; empty once this thread is resolved (nothing left to search for)
-    evidence: list[dict]  # accumulated evidence for THIS sub-question only
+    question: str
+    queries_to_run: list[str]
+    evidence: list[dict]
     resolved: bool
     reasoning: str
 
@@ -40,14 +41,14 @@ class VerificationState(TypedDict):
     claim_id: str
     threads: list[Thread]
     iteration: int
-    rounds: list[dict]  # audit trail: one entry per round, with
-    # per-thread detail (queries used, new evidence count, resolved, reasoning)
-    last_round_detail: list[dict]  # handoff from retrieve_node to
-    # sufficiency_node for this round's audit entry
-    is_sufficient: bool  # True once every thread is resolved
+    rounds: list[dict]
+    last_round_detail: list[dict]
+    is_sufficient: bool
     verdict: dict | None
-    all_evidence: list[dict]  # the flattened, deduped list verdict_node
-    # citations are numbered over
+    all_evidence: list[dict]
+    total_tokens_used: int
+    total_prompt_tokens: int
+    total_completion_tokens: int
 
 
 def _dedupe(chunks: list[dict]) -> list[dict]:
@@ -59,15 +60,33 @@ def _dedupe(chunks: list[dict]) -> list[dict]:
     return out
 
 
-def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
-    """`retrieve_tool` is the MCP-exposed `retrieve_evidence` tool."""
+def _compact_evidence(chunks: list[dict], max_chars: int) -> list[dict]:
+    """Keeps the most recently retrieved chunks (from the end of `chunks`)
+    whose cumulative text length fits within `max_chars`; older chunks are
+    dropped. Always keeps at least one chunk, even if it alone exceeds the
+    budget. No default for `max_chars`, always pass
+    MAX_EVIDENCE_CHARS_PER_THREAD explicitly at the call site."""
+    kept: list[dict] = []
+    total = 0
+    for chunk in reversed(chunks):
+        length = len(chunk["text"])
+        if kept and total + length > max_chars:
+            break
+        kept.append(chunk)
+        total += length
+    kept.reverse()
+    return kept
+
+
+def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointer=None):
+    """`retrieve_tool` is the MCP-exposed `retrieve_evidence` tool.
+    `checkpointer`, when given, makes the compiled graph resumable."""
 
     def decompose_node(state: VerificationState) -> dict:
-        sub_questions = decompose_claim(state["claim"])
+        sub_questions, usage = decompose_claim(state["claim"])
         threads: list[Thread] = [
             {
                 "question": sq.question,
-                # round-1 search uses initial_query
                 "queries_to_run": [sq.initial_query],
                 "evidence": [],
                 "resolved": False,
@@ -75,7 +94,15 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
             }
             for sq in sub_questions
         ]
-        return {"threads": threads, "iteration": 0}
+        prompt_tokens = usage.get("prompt_tokens", 0) or 0
+        completion_tokens = usage.get("completion_tokens", 0) or 0
+        return {
+            "threads": threads,
+            "iteration": 0,
+            "total_tokens_used": prompt_tokens + completion_tokens,
+            "total_prompt_tokens": prompt_tokens,
+            "total_completion_tokens": completion_tokens,
+        }
 
     async def retrieve_node(state: VerificationState) -> dict:
         new_threads = []
@@ -84,9 +111,6 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
             queries = thread["queries_to_run"]
             new_evidence = []
             for query in queries:
-                # LangChain's MCP tool wrapper returns a list of content
-                # blocks (e.g. [{"type": "text", "text": "<our
-                # json.dumps(...) string>"}])
                 content_blocks = await retrieve_tool.ainvoke(
                     {"claim_id": state["claim_id"], "query": query, "top_k": top_k_per_query}
                 )
@@ -96,7 +120,7 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
                     chunk["retrieval_query"] = query
                 new_evidence.extend(chunks)
             deduped_new = _dedupe(new_evidence)
-            combined = _dedupe(thread["evidence"] + deduped_new)
+            combined = _compact_evidence(_dedupe(thread["evidence"] + deduped_new), MAX_EVIDENCE_CHARS_PER_THREAD)
             new_threads.append({**thread, "evidence": combined, "queries_to_run": []})
             round_detail.append(
                 {
@@ -118,12 +142,15 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
         unresolved_indices = [i for i, t in enumerate(threads) if not t["resolved"]]
 
         result_by_index = {}
+        call_prompt_tokens, call_completion_tokens = 0, 0
         if unresolved_indices:
-            check = check_sufficiency(
+            check, usage = check_sufficiency(
                 state["claim"],
                 [{"question": threads[i]["question"], "evidence": threads[i]["evidence"]} for i in unresolved_indices],
             )
             result_by_index = dict(zip(unresolved_indices, check.threads))
+            call_prompt_tokens = usage.get("prompt_tokens", 0) or 0
+            call_completion_tokens = usage.get("completion_tokens", 0) or 0
 
         last_detail = state.get("last_round_detail", [])
         new_threads = []
@@ -141,7 +168,6 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
                 )
                 resolved_this_round, reasoning_this_round = result.resolved, result.reasoning
             else:
-
                 new_threads.append({**thread, "queries_to_run": []})
                 resolved_this_round, reasoning_this_round = thread["resolved"], thread["reasoning"]
 
@@ -161,10 +187,21 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
 
         rounds_log = state["rounds"] + [{"round": state["iteration"], "threads": round_threads_log}]
         is_sufficient = all(t["resolved"] for t in new_threads)
-        return {"threads": new_threads, "rounds": rounds_log, "is_sufficient": is_sufficient}
+        return {
+            "threads": new_threads,
+            "rounds": rounds_log,
+            "is_sufficient": is_sufficient,
+            "total_tokens_used": state["total_tokens_used"] + call_prompt_tokens + call_completion_tokens,
+            "total_prompt_tokens": state["total_prompt_tokens"] + call_prompt_tokens,
+            "total_completion_tokens": state["total_completion_tokens"] + call_completion_tokens,
+        }
 
     def route_after_sufficiency(state: VerificationState) -> str:
-        if state["is_sufficient"] or state["iteration"] >= MAX_ITERATIONS:
+        if (
+            state["is_sufficient"]
+            or state["iteration"] >= MAX_ITERATIONS
+            or state["total_tokens_used"] >= MAX_TOKENS_PER_RUN
+        ):
             return "verdict"
         return "retrieve"
 
@@ -175,7 +212,6 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
         ]
 
         all_evidence = _dedupe([chunk for t in state["threads"] for chunk in t["evidence"]])
-
 
         content_blocks = await judge_tool.ainvoke(
             {"claim": state["claim"], "evidence": all_evidence, "sub_findings": sub_findings}
@@ -188,7 +224,50 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
             if 1 <= n <= len(all_evidence)
         ]
         verdict["cited_sources"] = cited_sources
-        return {"verdict": verdict, "all_evidence": all_evidence}
+
+        verdict_usage = verdict.get("usage", {})
+        total_prompt_tokens = state["total_prompt_tokens"] + (verdict_usage.get("prompt_tokens", 0) or 0)
+        total_completion_tokens = state["total_completion_tokens"] + (verdict_usage.get("completion_tokens", 0) or 0)
+        total_tokens_used = total_prompt_tokens + total_completion_tokens
+        verdict["total_tokens_used"] = total_tokens_used
+        verdict["total_prompt_tokens"] = total_prompt_tokens
+        verdict["total_completion_tokens"] = total_completion_tokens
+        budget_exceeded = total_tokens_used >= MAX_TOKENS_PER_RUN
+
+        unresolved_questions = [t["question"] for t in state["threads"] if not t["resolved"]]
+        reasons = []
+        if unresolved_questions:
+            reasons.append(
+                f"{len(unresolved_questions)} of {len(state['threads'])} sub-question(s) "
+                f"remained unresolved after the maximum retrieval rounds: "
+                + "; ".join(unresolved_questions)
+            )
+        if verdict["label"] in ESCALATION_LABELS:
+            reasons.append(
+                f"Verdict label ({verdict['label']!r}) is inherently ambiguous by "
+                f"design, not a confident Supported/Refuted call."
+            )
+        if verdict.get("invalid_citations"):
+            reasons.append(
+                f"Citation(s) {verdict['invalid_citations']} could not be resolved to "
+                f"valid evidence even after self-correction."
+            )
+        if budget_exceeded:
+            reasons.append(
+                f"Run stopped early: token budget of {MAX_TOKENS_PER_RUN} exceeded "
+                f"({total_tokens_used} tokens used across the run), this run may not "
+                f"have finished as much retrieval/refinement as a normal one would."
+            )
+        verdict["escalate"] = bool(reasons)
+        verdict["escalation_reasons"] = reasons
+
+        return {
+            "verdict": verdict,
+            "all_evidence": all_evidence,
+            "total_tokens_used": total_tokens_used,
+            "total_prompt_tokens": total_prompt_tokens,
+            "total_completion_tokens": total_completion_tokens,
+        }
 
     graph = StateGraph(VerificationState)
     graph.add_node("decompose", decompose_node)
@@ -204,10 +283,13 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3):
     )
     graph.add_edge("verdict", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
-async def run_verification(app, claim: str, claim_id: str) -> VerificationState:
+async def run_verification(app, claim: str, claim_id: str, config: dict | None = None) -> VerificationState:
+    """Starts a fresh run. `config` only matters if `app` was built with a
+    checkpointer, pass the same `config` to resume an existing thread
+    instead of starting fresh."""
     initial_state: VerificationState = {
         "claim": claim,
         "claim_id": claim_id,
@@ -218,5 +300,17 @@ async def run_verification(app, claim: str, claim_id: str) -> VerificationState:
         "is_sufficient": False,
         "verdict": None,
         "all_evidence": [],
+        "total_tokens_used": 0,
+        "total_prompt_tokens": 0,
+        "total_completion_tokens": 0,
     }
-    return await app.ainvoke(initial_state)
+    return await app.ainvoke(initial_state, config=config)
+
+
+async def run_or_resume(app, claim: str, claim_id: str, config: dict) -> VerificationState:
+    """Resumes a run already in progress under `config`'s thread_id if one
+    exists and hasn't reached END, otherwise starts a fresh run."""
+    existing = await app.aget_state(config)
+    if existing.next:
+        return await app.ainvoke(None, config=config)
+    return await run_verification(app, claim, claim_id, config=config)

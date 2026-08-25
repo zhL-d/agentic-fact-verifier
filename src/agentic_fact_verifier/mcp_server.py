@@ -13,8 +13,8 @@ load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agentic_fact_verifier.mcp_auth import SharedSecretAuthMiddleware
-from agentic_fact_verifier.retrieval import INDEX_NAME, _get_model, hybrid_search
+from agentic_fact_verifier.mcp_auth import SharedSecretAuthMiddleware  # noqa: E402
+from agentic_fact_verifier.retrieval import INDEX_NAME, _get_model, hybrid_search  # noqa: E402
 
 ES_URL = os.environ.get("ES_URL", "http://localhost:9200")
 HOST = os.environ.get("MCP_SERVER_HOST", "127.0.0.1")

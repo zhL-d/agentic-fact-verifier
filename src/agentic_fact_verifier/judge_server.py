@@ -11,10 +11,10 @@ load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
-from agentic_fact_verifier.mcp_auth import SharedSecretAuthMiddleware
-from agentic_fact_verifier.verdict import VERDICT_LABELS, make_verdict
+from agentic_fact_verifier.mcp_auth import SharedSecretAuthMiddleware  # noqa: E402
+from agentic_fact_verifier.verdict import VERDICT_LABELS, make_verdict  # noqa: E402
 
 HOST = os.environ.get("JUDGE_SERVER_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JUDGE_SERVER_PORT", "8101"))

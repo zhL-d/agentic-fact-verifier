@@ -19,9 +19,9 @@ args = parser.parse_args()
 if args.arm == "full_compact_off":
     os.environ["MAX_EVIDENCE_CHARS_PER_THREAD"] = "100000000"
 
-import asyncio
-import json
-from pathlib import Path
+import asyncio  # noqa: E402
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 

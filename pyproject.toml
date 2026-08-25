@@ -9,10 +9,31 @@ dependencies = [
     "fastapi>=0.141.1",
     "langchain-mcp-adapters>=0.3.2",
     "langgraph>=1.2.11",
+    "langgraph-checkpoint-sqlite>=3.1.1",
     "mcp>=1.29.0",
     "openai>=3.2.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.3",
     "sentence-transformers>=6.0.0",
+    "starlette>=1.6.0",
+    "torch>=2.13.0",
     "uvicorn>=0.52.4",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff==0.16.4",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]

@@ -1,26 +1,27 @@
-"""Evidence sufficiency check. Given each sub-question's own accumulated evidence (tracked per
-sub-question "thread", judge PER sub-question whether there's
-enough to answer it, and if not, refine that specific sub-question's
-search queries. One LLM call handles every thread per round (not one call
-per thread), so cost doesn't scale with the number of sub-questions."""
+"""Evidence sufficiency check: given each sub-question's own accumulated
+evidence, judges per sub-question whether it's sufficient, and if not,
+proposes refined search queries. One LLM call handles every thread per
+round."""
 
 import json
 
 from pydantic import BaseModel, Field
 
-from agentic_fact_verifier.llm_client import call_llm
+from agentic_fact_verifier.llm_client import call_llm, schema_response_format
+from agentic_fact_verifier.prompt_guard import ANTI_INJECTION_NOTICE, wrap_evidence
 
 PROMPT_TEMPLATE = """You are checking whether enough evidence has been gathered to \
 answer each of several independent fact-checking sub-questions, all derived from \
-the same claim below. Each sub-question has its OWN evidence gathered so far — \
+the same claim below. Each sub-question has its OWN evidence gathered so far, \
 evidence for one sub-question must not be used to judge a different sub-question.
 
+""" + ANTI_INJECTION_NOTICE + """
 Original claim: {claim}
 
 {threads}
 
 For EACH sub-question above, judge whether ITS OWN evidence is sufficient to \
-answer it. If not, propose a small set of refined search queries — different from \
+answer it. If not, propose a small set of refined search queries, different from \
 previous queries for that sub-question (broader, narrower, or rephrased), that \
 would help fill the gap for THAT sub-question specifically.
 
@@ -55,14 +56,19 @@ class SufficiencyCheck(BaseModel):
     threads: list[ThreadSufficiency]
 
 
-def check_sufficiency(claim: str, threads: list[dict]) -> SufficiencyCheck:
-    """`threads` is a list of {"question": str, "evidence": list[dict]} —
-    one per sub-question, each carrying only its own accumulated
-    evidence."""
+_RESPONSE_FORMAT = schema_response_format(SufficiencyCheck, "SufficiencyCheck")
+
+
+def check_sufficiency(claim: str, threads: list[dict]) -> tuple[SufficiencyCheck, dict]:
+    """`threads` is a list of {"question": str, "evidence": list[dict]}, 
+    one per sub-question, each carrying only its own accumulated evidence.
+
+    Returns (check, usage), usage is this call's token usage."""
     blocks = []
     for i, t in enumerate(threads):
         evidence_text = "\n\n".join(
-            f"  [{j + 1}] {chunk['text']}" for j, chunk in enumerate(t["evidence"])
+            wrap_evidence(j + 1, chunk.get("url", ""), chunk["text"])
+            for j, chunk in enumerate(t["evidence"])
         ) or "  (none yet)"
         blocks.append(
             f"Sub-question {i}: {t['question']}\nEvidence for sub-question {i}:\n{evidence_text}"
@@ -70,18 +76,8 @@ def check_sufficiency(claim: str, threads: list[dict]) -> SufficiencyCheck:
     threads_text = "\n\n".join(blocks)
 
     prompt = PROMPT_TEMPLATE.format(claim=claim, threads=threads_text)
-    raw = call_llm(prompt, max_tokens=10000)
-
-    start, end = raw.find("{"), raw.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"No JSON object found in sufficiency response (len={len(raw)}). Raw:\n{raw}")
-    try:
-        parsed = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Malformed JSON in sufficiency response (len={len(raw)}): {e}\nRaw:\n{raw}"
-        ) from e
-    check = SufficiencyCheck.model_validate(parsed)
+    result = call_llm(prompt, max_tokens=10000, response_format=_RESPONSE_FORMAT)
+    check = SufficiencyCheck.model_validate(json.loads(result.content))
 
     by_index = {t.index: t for t in check.threads}
     normalized = []
@@ -97,4 +93,4 @@ def check_sufficiency(claim: str, threads: list[dict]) -> SufficiencyCheck:
                     refined_queries=[],
                 )
             )
-    return SufficiencyCheck(threads=normalized)
+    return SufficiencyCheck(threads=normalized), result.usage

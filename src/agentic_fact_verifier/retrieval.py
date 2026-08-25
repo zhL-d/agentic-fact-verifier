@@ -1,21 +1,17 @@
 """Hybrid (BM25 + kNN) retrieval over the AVeriTeC knowledge base, scoped
-to a single claim.
-
-Elasticsearch's native `rrf` retriever requires a paid license
-(our self-hosted instance is on the free `basic` license, which 403s on
-RRF).So implement RRF fusion instead: two separate queries (BM25, kNN), 
-fused in Python with the standard RRF formula
-(score = sum of 1/(k+rank) across rankers, k=60, the same constant
-Elasticsearch's own implementation and the original RRF paper use)."""
+to a single claim. Fuses two separate queries (BM25, kNN) with RRF,
+implemented in Python."""
 
 import os
 
 from elasticsearch import Elasticsearch
 from sentence_transformers import SentenceTransformer
 
+from agentic_fact_verifier.prompt_guard import scan_for_injection
+
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-RRF_K = 60  # standard constant from the original RRF paper / ES's own default
+RRF_K = 60
 
 _model: SentenceTransformer | None = None
 
@@ -48,9 +44,7 @@ def hybrid_search(
     BM25 keyword search and kNN semantic search via our own RRF fusion.
 
     `index_name` defaults to this module's INDEX_NAME (itself overridable
-    via the ES_INDEX_NAME env var) but can be passed explicitly per call —
-    this function has no AVeriTeC-specific logic, only a configurable
-    index to point at."""
+    via the ES_INDEX_NAME env var) but can be passed explicitly per call."""
     query_embedding = _get_model().encode(query, normalize_embeddings=True).tolist()
     candidate_pool = top_k * 10
 
@@ -82,4 +76,10 @@ def hybrid_search(
     by_id.update({hit["_id"]: hit["_source"] for hit in knn_resp["hits"]["hits"]})
 
     fused_ids = _rrf_fuse(bm25_ids, knn_ids)[:top_k]
-    return [by_id[doc_id] for doc_id in fused_ids]
+    chunks = []
+    for doc_id in fused_ids:
+        chunk = dict(by_id[doc_id])
+        chunk.pop("embedding", None)
+        chunk["injection_markers"] = scan_for_injection(chunk.get("text", ""))
+        chunks.append(chunk)
+    return chunks

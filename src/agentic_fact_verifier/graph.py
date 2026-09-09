@@ -8,8 +8,10 @@ Graph shape:
 
 import json
 import os
-from typing import TypedDict
+from collections.abc import AsyncIterator
+from typing import Any, TypedDict
 
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, StateGraph
 
 from agentic_fact_verifier.decomposition import decompose_claim
@@ -29,6 +31,7 @@ ESCALATION_LABELS = {
 
 
 class Thread(TypedDict):
+    thread_id: str
     question: str
     queries_to_run: list[str]
     evidence: list[dict]
@@ -86,13 +89,14 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
         sub_questions, usage = decompose_claim(state["claim"])
         threads: list[Thread] = [
             {
+                "thread_id": f"q{index + 1}",
                 "question": sq.question,
                 "queries_to_run": [sq.initial_query],
                 "evidence": [],
                 "resolved": False,
                 "reasoning": "",
             }
-            for sq in sub_questions
+            for index, sq in enumerate(sub_questions)
         ]
         prompt_tokens = usage.get("prompt_tokens", 0) or 0
         completion_tokens = usage.get("completion_tokens", 0) or 0
@@ -105,11 +109,23 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
         }
 
     async def retrieve_node(state: VerificationState) -> dict:
+        writer = get_stream_writer()
         new_threads = []
         round_detail = []
+        round_number = state["iteration"] + 1
         for thread in state["threads"]:
             queries = thread["queries_to_run"]
             new_evidence = []
+            if queries:
+                writer(
+                    {
+                        "event": "thread_retrieval_started",
+                        "thread_id": thread["thread_id"],
+                        "question": thread["question"],
+                        "round": round_number,
+                        "queries": queries,
+                    }
+                )
             for query in queries:
                 content_blocks = await retrieve_tool.ainvoke(
                     {"claim_id": state["claim_id"], "query": query, "top_k": top_k_per_query}
@@ -122,8 +138,20 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
             deduped_new = _dedupe(new_evidence)
             combined = _compact_evidence(_dedupe(thread["evidence"] + deduped_new), MAX_EVIDENCE_CHARS_PER_THREAD)
             new_threads.append({**thread, "evidence": combined, "queries_to_run": []})
+            if queries:
+                writer(
+                    {
+                        "event": "thread_retrieval_completed",
+                        "thread_id": thread["thread_id"],
+                        "question": thread["question"],
+                        "round": round_number,
+                        "new_hits": len(deduped_new),
+                        "unique_retained": len(combined),
+                    }
+                )
             round_detail.append(
                 {
+                    "thread_id": thread["thread_id"],
                     "question": thread["question"],
                     "queries_used": queries,
                     "new_evidence": deduped_new,
@@ -137,6 +165,7 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
         }
 
     def sufficiency_node(state: VerificationState) -> dict:
+        writer = get_stream_writer()
         threads = state["threads"]
 
         unresolved_indices = [i for i, t in enumerate(threads) if not t["resolved"]]
@@ -144,6 +173,15 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
         result_by_index = {}
         call_prompt_tokens, call_completion_tokens = 0, 0
         if unresolved_indices:
+            for index in unresolved_indices:
+                writer(
+                    {
+                        "event": "thread_sufficiency_started",
+                        "thread_id": threads[index]["thread_id"],
+                        "question": threads[index]["question"],
+                        "round": state["iteration"],
+                    }
+                )
             check, usage = check_sufficiency(
                 state["claim"],
                 [{"question": threads[i]["question"], "evidence": threads[i]["evidence"]} for i in unresolved_indices],
@@ -167,6 +205,17 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
                     }
                 )
                 resolved_this_round, reasoning_this_round = result.resolved, result.reasoning
+                writer(
+                    {
+                        "event": "thread_sufficiency_completed",
+                        "thread_id": thread["thread_id"],
+                        "question": thread["question"],
+                        "round": state["iteration"],
+                        "resolved": result.resolved,
+                        "reasoning": result.reasoning,
+                        "refined_queries": result.refined_queries,
+                    }
+                )
             else:
                 new_threads.append({**thread, "queries_to_run": []})
                 resolved_this_round, reasoning_this_round = thread["resolved"], thread["reasoning"]
@@ -176,6 +225,7 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
             }
             round_threads_log.append(
                 {
+                    "thread_id": thread["thread_id"],
                     "question": thread["question"],
                     "queries_used": detail["queries_used"],
                     "new_evidence": detail["new_evidence"],
@@ -290,7 +340,11 @@ async def run_verification(app, claim: str, claim_id: str, config: dict | None =
     """Starts a fresh run. `config` only matters if `app` was built with a
     checkpointer, pass the same `config` to resume an existing thread
     instead of starting fresh."""
-    initial_state: VerificationState = {
+    return await app.ainvoke(_initial_state(claim, claim_id), config=config)
+
+
+def _initial_state(claim: str, claim_id: str) -> VerificationState:
+    return {
         "claim": claim,
         "claim_id": claim_id,
         "threads": [],
@@ -304,7 +358,6 @@ async def run_verification(app, claim: str, claim_id: str, config: dict | None =
         "total_prompt_tokens": 0,
         "total_completion_tokens": 0,
     }
-    return await app.ainvoke(initial_state, config=config)
 
 
 async def run_or_resume(app, claim: str, claim_id: str, config: dict) -> VerificationState:
@@ -314,3 +367,32 @@ async def run_or_resume(app, claim: str, claim_id: str, config: dict) -> Verific
     if existing.next:
         return await app.ainvoke(None, config=config)
     return await run_verification(app, claim, claim_id, config=config)
+
+
+async def stream_or_resume(
+    app, claim: str, claim_id: str, config: dict
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """Yield each completed LangGraph node and then the final state.
+
+    ``stream_mode="updates"`` is the graph's actual execution stream: events
+    are emitted only after a node has committed its state update. With a
+    checkpointer, an interrupted run resumes from its pending node rather than
+    replaying completed work.
+    """
+    existing = await app.aget_state(config)
+    graph_input = None if existing.next else _initial_state(claim, claim_id)
+
+    async for part in app.astream(
+        graph_input,
+        config=config,
+        stream_mode=["updates", "custom"],
+        version="v2",
+    ):
+        if part["type"] == "updates":
+            for node_name, node_update in part["data"].items():
+                yield node_name, node_update
+        elif part["type"] == "custom":
+            yield "__custom__", part["data"]
+
+    snapshot = await app.aget_state(config)
+    yield "__complete__", dict(snapshot.values)

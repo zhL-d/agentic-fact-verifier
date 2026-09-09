@@ -264,3 +264,47 @@ async def test_fresh_thread_id_has_no_leftover_state(fake_tool, monkeypatch):
 
     state = await app.aget_state({"configurable": {"thread_id": "never-used"}})
     assert not state.next
+
+
+async def test_stream_or_resume_yields_real_node_updates_and_final_state(fake_tool, monkeypatch):
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    monkeypatch.setattr(graph_mod, "decompose_claim", _two_subquestions())
+    monkeypatch.setattr(graph_mod, "check_sufficiency", _always_resolved())
+    app = graph_mod.build_graph(
+        fake_tool(_retrieve_returning_evidence),
+        fake_tool(_judge_returning()),
+        checkpointer=InMemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "stream-test"}}
+
+    events = [
+        (node, update)
+        async for node, update in graph_mod.stream_or_resume(app, CLAIM, "stream-test", config)
+    ]
+
+    node_updates = [(node, update) for node, update in events if node != "__custom__"]
+    custom_events = [update for node, update in events if node == "__custom__"]
+
+    assert [node for node, _ in node_updates] == [
+        "decompose",
+        "retrieve",
+        "check_sufficiency",
+        "verdict",
+        "__complete__",
+    ]
+    assert node_updates[1][1]["iteration"] == 1
+    assert node_updates[2][1]["rounds"][0]["round"] == 1
+    assert node_updates[-1][1]["verdict"]["label"] == "Supported"
+    assert [event["event"] for event in custom_events] == [
+        "thread_retrieval_started",
+        "thread_retrieval_completed",
+        "thread_retrieval_started",
+        "thread_retrieval_completed",
+        "thread_sufficiency_started",
+        "thread_sufficiency_started",
+        "thread_sufficiency_completed",
+        "thread_sufficiency_completed",
+    ]
+    assert custom_events[0]["thread_id"] == "q1"
+    assert custom_events[1]["new_hits"] == 1

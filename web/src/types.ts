@@ -8,6 +8,7 @@ export interface EvidenceChunk {
 }
 
 export interface RoundThread {
+  thread_id?: string;
   question: string;
   queries_used: string[];
   new_evidence: EvidenceChunk[];
@@ -22,6 +23,7 @@ export interface Round {
 }
 
 export interface Thread {
+  thread_id?: string;
   question: string;
   resolved: boolean;
   reasoning: string;
@@ -61,4 +63,82 @@ export interface ClaimSummary {
   claim_id: number;
   claim: string;
   gold_label: string;
+}
+
+export interface LiveThread extends Thread {
+  thread_id: string;
+  queries_to_run: string[];
+}
+
+export interface RetrievalDetail {
+  thread_id?: string;
+  question: string;
+  queries_used: string[];
+  new_evidence: EvidenceChunk[];
+  n_new_evidence: number;
+}
+
+export interface StartRunResponse {
+  run_id: string;
+}
+
+export interface RunStartedEvent {
+  run_id: string;
+  claim_id: string;
+  claim: string;
+  gold_label: string;
+}
+
+export interface DecompositionCompletedEvent {
+  threads: LiveThread[];
+  total_tokens_used: number;
+  max_rounds: number;
+}
+
+export interface RetrievalStartedEvent {
+  round: number;
+  max_rounds: number;
+}
+
+export interface RetrievalCompletedEvent {
+  round: number;
+  threads: LiveThread[];
+  details: RetrievalDetail[];
+}
+
+export interface RoundCompletedEvent {
+  round: Round;
+  threads: LiveThread[];
+  is_sufficient: boolean;
+  total_tokens_used: number;
+}
+
+export interface ThreadRetrievalStartedEvent {
+  thread_id: string;
+  question: string;
+  round: number;
+  queries: string[];
+}
+
+export interface ThreadRetrievalCompletedEvent {
+  thread_id: string;
+  question: string;
+  round: number;
+  new_hits: number;
+  unique_retained: number;
+}
+
+export interface ThreadSufficiencyStartedEvent {
+  thread_id: string;
+  question: string;
+  round: number;
+}
+
+export interface ThreadSufficiencyCompletedEvent {
+  thread_id: string;
+  question: string;
+  round: number;
+  resolved: boolean;
+  reasoning: string;
+  refined_queries: string[];
 }

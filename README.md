@@ -40,10 +40,10 @@ verdicts for human review.
 - **PostgreSQL**, the checkpoint store behind crash-resumable runs (LangGraph's AsyncPostgresSaver).
 - **LangSmith**, observability: traces every LLM call and graph step end-to-end.
 - **FastAPI**, the API tier.
-- **TypeScript + Vite**, the frontend.
+- **React + TypeScript + Vite**, the frontend, **Bun** manages its dependencies and scripts.
 - **Nginx**, reverse proxy; serves the built frontend and routes to the API tier.
 - **Docker Compose**, local orchestration across all six services.
-- **GitHub Actions**, CI: lint + tests for the backend, type-check + build for the frontend, on every push/PR to main.
+- **GitHub Actions**, CI: lint + tests for the backend, tests + type-check + build for the frontend, on every push/PR to main.
 
 ### Deployment topology
 
@@ -188,9 +188,18 @@ Setup above work identically once the two env vars point at your data.
 uv run pytest tests/
 ```
 
-Runs automatically on every push/PR to main via **GitHub Actions**
-(`.github/workflows/ci.yml`), lint (`ruff`) and test suite for the
-backend, a type-check + build for the frontend.
+The frontend checks can be run separately with:
+
+```bash
+cd web
+bun install --frozen-lockfile
+bun run test
+bun run build
+```
+
+Both suites run automatically on every push/PR to main via **GitHub Actions**
+(`.github/workflows/ci.yml`): lint (`ruff`) and pytest for the backend;
+Vitest, type-checking, and a production build for the frontend.
 
 ## Evaluation
 

@@ -70,6 +70,19 @@ async def client():
         yield value
 
 
+@pytest.fixture(autouse=True)
+def claim_dataset_stub(monkeypatch):
+    """Keep API contract tests independent of the downloaded AVeriTeC data."""
+    monkeypatch.setattr(
+        api,
+        "get_claim",
+        lambda claim_id: {
+            "claim": f"Test claim {claim_id}",
+            "label": "Supported",
+        },
+    )
+
+
 async def test_create_run_is_idempotent_and_dispatches_once(client, monkeypatch):
     store = FakeRunStore()
     api.app.state.run_store = store
@@ -134,4 +147,3 @@ async def test_sse_replays_only_events_after_last_event_id(client):
     assert "id: 1" not in response.text
     assert "id: 2\nevent: failed" in response.text
     assert 'data: {"message":"boom"}' in response.text
-

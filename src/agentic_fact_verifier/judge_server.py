@@ -12,16 +12,19 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
+from mcp.server.fastmcp.server import Settings as FastMCPSettings  # noqa: E402
 
+from agentic_fact_verifier.config import read_secret  # noqa: E402
 from agentic_fact_verifier.mcp_auth import SharedSecretAuthMiddleware  # noqa: E402
 from agentic_fact_verifier.verdict import VERDICT_LABELS, make_verdict  # noqa: E402
 
 HOST = os.environ.get("JUDGE_SERVER_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JUDGE_SERVER_PORT", "8101"))
-MCP_SHARED_SECRET = os.environ.get("MCP_SHARED_SECRET")
+MCP_SHARED_SECRET = read_secret("MCP_SHARED_SECRET")
 if not MCP_SHARED_SECRET:
     raise SystemExit("MCP_SHARED_SECRET not set, required to auth this tool server.")
 
+FastMCPSettings.model_rebuild()
 mcp = FastMCP("agentic-fact-verifier-judge", host=HOST, port=PORT)
 
 _labels_env = os.environ.get("VERDICT_LABELS")

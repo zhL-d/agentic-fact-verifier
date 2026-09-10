@@ -1,11 +1,11 @@
 [project]
 name = "agentic-fact-verifier"
 version = "0.1.0"
-description = "Add your description here"
+description = ""
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "einops>=0.8.1",
+    "celery[redis]>=5.6.0,<6",
     "elasticsearch>=9.5.0",
     "fastapi>=0.141.1",
     "langchain-mcp-adapters>=0.3.2",
@@ -16,9 +16,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.2.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.3",
-    "sentence-transformers>=6.0.0",
     "starlette>=1.6.0",
-    "torch>=2.13.0",
     "uvicorn>=0.52.4",
 ]
 
@@ -27,6 +25,11 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff==0.16.4",
+]
+retrieval = [
+    "einops>=0.8.1",
+    "sentence-transformers>=6.0.0",
+    "torch>=2.13.0",
 ]
 
 [tool.pytest.ini_options]
@@ -38,4 +41,14 @@ line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W"]
+select = ["B", "E", "F", "I", "UP", "W"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

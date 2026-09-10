@@ -10,28 +10,81 @@ from sentence_transformers import SentenceTransformer
 from agentic_fact_verifier.prompt_guard import scan_for_injection
 
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v2-moe")
+
+DEFAULT_EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v2-moe"
+
+PINNED_REVISIONS = {
+    "nomic-ai/nomic-embed-text-v2-moe": "f0bcc8894f384250588bd1ba946c080e4339dedf",
+    "sentence-transformers/all-MiniLM-L6-v2": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+}
+
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL
+
+EMBEDDING_MODEL_REVISION = os.environ.get("EMBEDDING_MODEL_REVISION") or PINNED_REVISIONS.get(EMBEDDING_MODEL)
 EMBEDDING_QUERY_PROMPT = os.environ.get("EMBEDDING_QUERY_PROMPT", "query")
 RRF_K = 60
 
 _model: SentenceTransformer | None = None
+_index_checked: set[str] = set()
+
+
+class EmbeddingIndexMismatch(RuntimeError):
+    """The configured embedding model cannot produce vectors for this index."""
 
 
 def _get_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code=True)
+        _model = SentenceTransformer(
+            EMBEDDING_MODEL,
+            revision=EMBEDDING_MODEL_REVISION,
+            trust_remote_code=True,
+        )
     return _model
+
+
+def prompt_kwargs(model: SentenceTransformer, prompt_name: str | None) -> dict:
+
+    if not prompt_name:
+        return {}
+    if prompt_name not in (getattr(model, "prompts", None) or {}):
+        return {}
+    return {"prompt_name": prompt_name}
+
+
+def _assert_index_compatible(es: Elasticsearch, index_name: str) -> None:
+
+    if index_name in _index_checked:
+        return
+
+    mapping = es.indices.get_mapping(index=index_name)
+    properties = mapping[index_name]["mappings"].get("properties", {})
+    index_dims = properties.get("embedding", {}).get("dims")
+    model_dims = _get_model().get_sentence_embedding_dimension()
+
+    if index_dims is not None and index_dims != model_dims:
+        raise EmbeddingIndexMismatch(
+            f"Index {index_name!r} stores {index_dims}-dimensional vectors but "
+            f"EMBEDDING_MODEL={EMBEDDING_MODEL!r} produces {model_dims}. Either point "
+            f"EMBEDDING_MODEL at the model this index was built with, or re-ingest into "
+            f"a fresh ES_INDEX_NAME with the current model."
+        )
+    _index_checked.add(index_name)
 
 
 def _rrf_fuse(*ranked_lists: list[str], k: int = RRF_K) -> list[str]:
     """Each ranked_list is a list of doc _ids in rank order. Returns doc
     _ids sorted by fused RRF score, descending."""
+    scores = _rrf_scores(*ranked_lists, k=k)
+    return sorted(scores, key=scores.get, reverse=True)
+
+
+def _rrf_scores(*ranked_lists: list[str], k: int = RRF_K) -> dict[str, float]:
     scores: dict[str, float] = {}
     for ranked_list in ranked_lists:
         for rank, doc_id in enumerate(ranked_list, start=1):
             scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-    return sorted(scores, key=scores.get, reverse=True)
+    return scores
 
 
 def hybrid_search(
@@ -46,8 +99,11 @@ def hybrid_search(
 
     `index_name` defaults to this module's INDEX_NAME (itself overridable
     via the ES_INDEX_NAME env var) but can be passed explicitly per call."""
-    encode_kwargs = {"prompt_name": EMBEDDING_QUERY_PROMPT} if EMBEDDING_QUERY_PROMPT else {}
-    query_embedding = _get_model().encode(query, normalize_embeddings=True, **encode_kwargs).tolist()
+    _assert_index_compatible(es, index_name)
+    model = _get_model()
+    query_embedding = model.encode(
+        query, normalize_embeddings=True, **prompt_kwargs(model, EMBEDDING_QUERY_PROMPT)
+    ).tolist()
     candidate_pool = top_k * 10
 
     bm25_resp = es.search(
@@ -77,11 +133,14 @@ def hybrid_search(
     by_id = {hit["_id"]: hit["_source"] for hit in bm25_resp["hits"]["hits"]}
     by_id.update({hit["_id"]: hit["_source"] for hit in knn_resp["hits"]["hits"]})
 
-    fused_ids = _rrf_fuse(bm25_ids, knn_ids)[:top_k]
+    scores = _rrf_scores(bm25_ids, knn_ids)
+    fused_ids = sorted(scores, key=scores.get, reverse=True)[:top_k]
     chunks = []
-    for doc_id in fused_ids:
+    for rank, doc_id in enumerate(fused_ids, start=1):
         chunk = dict(by_id[doc_id])
         chunk.pop("embedding", None)
+        chunk["retrieval_rank"] = rank
+        chunk["retrieval_score"] = scores[doc_id]
         chunk["injection_markers"] = scan_for_injection(chunk.get("text", ""))
         chunks.append(chunk)
     return chunks

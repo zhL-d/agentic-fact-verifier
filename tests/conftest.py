@@ -2,8 +2,12 @@
 
 import asyncio
 import json
+import os
 
 import pytest
+
+os.environ["LANGSMITH_TRACING"] = "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
 
 class FakeMCPTool:

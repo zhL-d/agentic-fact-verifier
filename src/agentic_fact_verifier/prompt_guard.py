@@ -2,6 +2,7 @@
 prompt-level hardening (`ANTI_INJECTION_NOTICE`, `wrap_evidence`) plus
 heuristic detection (`scan_for_injection`) for audit-trail flagging."""
 
+import html
 import re
 
 ANTI_INJECTION_NOTICE = (
@@ -42,4 +43,6 @@ def scan_for_injection(text: str) -> list[str]:
 def wrap_evidence(index: int, url: str, text: str) -> str:
     """Delimits one evidence chunk so prompt-construction code never
     splices raw untrusted text directly next to instructions."""
-    return f'<evidence index="{index}" source="{url}">\n{text}\n</evidence>'
+    safe_url = html.escape(url, quote=True)
+    safe_text = html.escape(text, quote=False)
+    return f'<evidence index="{index}" source="{safe_url}">\n{safe_text}\n</evidence>'

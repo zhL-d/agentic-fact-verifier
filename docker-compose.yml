@@ -1,13 +1,13 @@
 services:
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.1
-    container_name: afv-elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.1@sha256:b70b3017fbd35310bc57e7e3f8c0ca42ca0b94df3331f747b7cdcfddae430a5a
+    init: true
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -19,45 +19,67 @@ services:
   mcp_server:
     build:
       context: .
-      target: app
+      target: retrieval
       args:
         BAKE_MODEL_WEIGHTS: "${BAKE_MODEL_WEIGHTS:-false}"
+        EMBEDDING_MODEL: "${EMBEDDING_MODEL:-}"
+        EMBEDDING_MODEL_REVISION: "${EMBEDDING_MODEL_REVISION:-}"
     command: ["uv", "run", "--no-sync", "python", "src/agentic_fact_verifier/mcp_server.py"]
     environment:
       - ES_URL=http://elasticsearch:9200
       - ES_INDEX_NAME=${ES_INDEX_NAME:-averitec_dev_chunks}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v2-moe}
+
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-}
+      - EMBEDDING_MODEL_REVISION=${EMBEDDING_MODEL_REVISION:-}
       - EMBEDDING_QUERY_PROMPT=${EMBEDDING_QUERY_PROMPT-query}
       - MCP_SERVER_HOST=0.0.0.0
       - MCP_SERVER_PORT=8100
-      - MCP_SHARED_SECRET=${MCP_SHARED_SECRET}
-    ports:
-      - "8100:8100"
+      - MCP_SHARED_SECRET_FILE=/run/secrets/mcp_shared_secret
+    secrets:
+      - mcp_shared_secret
+    volumes:
+      - hf_cache:/app/.cache/huggingface
+    expose:
+      - "8100"
     depends_on:
       elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8100/mcp || exit 1"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8100/health"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 60s # first startup loads the embedding model
+      start_period: 15s
 
   postgres:
-    image: postgres:17-alpine
-    container_name: afv-postgres
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    init: true
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-afv}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-afv}
       - POSTGRES_DB=${POSTGRES_DB:-afv_checkpoints}
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-afv} -d ${POSTGRES_DB:-afv_checkpoints}"]
       interval: 10s
       timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    init: true
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 10
 
   judge_server:
@@ -69,15 +91,17 @@ services:
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - OPENAI_MODEL=${OPENAI_MODEL:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5.6-terra}
       - VERDICT_LABELS=${VERDICT_LABELS:-}
       - JUDGE_SERVER_HOST=0.0.0.0
       - JUDGE_SERVER_PORT=8101
-      - MCP_SHARED_SECRET=${MCP_SHARED_SECRET}
-    ports:
-      - "8101:8101"
+      - MCP_SHARED_SECRET_FILE=/run/secrets/mcp_shared_secret
+    secrets:
+      - mcp_shared_secret
+    expose:
+      - "8101"
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8101/mcp || exit 1"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8101/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -88,22 +112,55 @@ services:
       target: app
     command: ["uv", "run", "--no-sync", "uvicorn", "agentic_fact_verifier.api_server:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000"]
     environment:
+      - CHECKPOINT_DB_URL=postgresql://${POSTGRES_USER:-afv}:${POSTGRES_PASSWORD:-afv}@postgres:5432/${POSTGRES_DB:-afv_checkpoints}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - MAX_ACTIVE_RUNS=${MAX_ACTIVE_RUNS:-10}
+    expose:
+      - "8000"
+    volumes:
+      - ./data:/app/data:ro 
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      target: app
+    init: true
+    command:
+      [
+        "uv", "run", "--no-sync", "celery",
+        "-A", "agentic_fact_verifier.celery_app:celery_app",
+        "worker", "--loglevel=INFO", "--concurrency=${CELERY_WORKER_CONCURRENCY:-2}"
+      ]
+    environment:
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - OPENAI_MODEL=${OPENAI_MODEL:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5.6-terra}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-120}
       - MCP_SERVER_URL=http://mcp_server:8100/mcp
       - JUDGE_SERVER_URL=http://judge_server:8101/mcp
-      - MCP_SHARED_SECRET=${MCP_SHARED_SECRET}
+      - MCP_SHARED_SECRET_FILE=/run/secrets/mcp_shared_secret
       - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
       - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-}
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
       - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-}
       - CHECKPOINT_DB_URL=postgresql://${POSTGRES_USER:-afv}:${POSTGRES_PASSWORD:-afv}@postgres:5432/${POSTGRES_DB:-afv_checkpoints}
-    ports:
-      - "8001:8000"
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - RUN_MAX_RETRIES=${RUN_MAX_RETRIES:-2}
+    secrets:
+      - mcp_shared_secret
     volumes:
-      - ./data:/app/data:ro # dev.json + knowledge store, gitignored, host-provided
+      - ./data:/app/data:ro
     depends_on:
       mcp_server:
         condition: service_healthy
@@ -111,22 +168,30 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/api/claims || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      redis:
+        condition: service_healthy
 
   nginx:
     build:
       context: .
       target: nginx
     ports:
-      - "8000:80" # http://localhost:8000, serves web/dist/, proxies /api/* to api_server
+      - "127.0.0.1:8000:80" 
     depends_on:
       api_server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   es_data:
+  hf_cache:
   postgres_data:
+  redis_data:
+
+secrets:
+  mcp_shared_secret:
+    environment: MCP_SHARED_SECRET

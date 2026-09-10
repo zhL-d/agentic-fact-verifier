@@ -17,6 +17,11 @@ class SharedSecretAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
+        if scope.get("path") == "/health":
+            response = JSONResponse({"status": "ok"})
+            await response(scope, receive, send)
+            return
+
         headers = dict(scope["headers"])
         auth_header = headers.get(b"authorization", b"").decode()
         if auth_header != f"Bearer {self.secret}":

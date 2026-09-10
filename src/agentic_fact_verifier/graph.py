@@ -57,27 +57,42 @@ class VerificationState(TypedDict):
 def _dedupe(chunks: list[dict]) -> list[dict]:
     seen, out = set(), []
     for chunk in chunks:
-        if chunk["text"] not in seen:
-            seen.add(chunk["text"])
+        normalized_text = " ".join(chunk["text"].split()).casefold()
+        if normalized_text not in seen:
+            seen.add(normalized_text)
             out.append(chunk)
     return out
 
 
 def _compact_evidence(chunks: list[dict], max_chars: int) -> list[dict]:
-    """Keeps the most recently retrieved chunks (from the end of `chunks`)
-    whose cumulative text length fits within `max_chars`; older chunks are
-    dropped. Always keeps at least one chunk, even if it alone exceeds the
-    budget. No default for `max_chars`, always pass
-    MAX_EVIDENCE_CHARS_PER_THREAD explicitly at the call site."""
+    """Keep the strongest, source-diverse evidence within the text budget.
+    """
+    ranked = sorted(
+        enumerate(chunks),
+        key=lambda item: (float(item[1].get("retrieval_score", 0.0)), item[0]),
+        reverse=True,
+    )
+    distinct_sources: list[tuple[int, dict]] = []
+    repeated_sources: list[tuple[int, dict]] = []
+    seen_urls: set[str] = set()
+    for item in ranked:
+        url = item[1].get("url", "")
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            distinct_sources.append(item)
+        else:
+            repeated_sources.append(item)
+
     kept: list[dict] = []
     total = 0
-    for chunk in reversed(chunks):
+    for _, chunk in distinct_sources + repeated_sources:
         length = len(chunk["text"])
         if kept and total + length > max_chars:
-            break
+            continue
         kept.append(chunk)
         total += length
-    kept.reverse()
+        if total >= max_chars:
+            break
     return kept
 
 
@@ -186,7 +201,7 @@ def build_graph(retrieve_tool, judge_tool, top_k_per_query: int = 3, checkpointe
                 state["claim"],
                 [{"question": threads[i]["question"], "evidence": threads[i]["evidence"]} for i in unresolved_indices],
             )
-            result_by_index = dict(zip(unresolved_indices, check.threads))
+            result_by_index = dict(zip(unresolved_indices, check.threads, strict=True))
             call_prompt_tokens = usage.get("prompt_tokens", 0) or 0
             call_completion_tokens = usage.get("completion_tokens", 0) or 0
 

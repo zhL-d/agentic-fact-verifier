@@ -1,240 +1,39 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { startVerificationRun } from "../api";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { LABEL_CLASS } from "../labels";
-import type {
-  DecompositionCompletedEvent,
-  LiveThread,
-  RetrievalCompletedEvent,
-  RetrievalStartedEvent,
-  Round,
-  RoundCompletedEvent,
-  RunStartedEvent,
-  ThreadRetrievalCompletedEvent,
-  ThreadRetrievalStartedEvent,
-  ThreadSufficiencyCompletedEvent,
-  ThreadSufficiencyStartedEvent,
-  VerifyResponse,
-} from "../types";
+import type { VerifyResponse } from "../types";
+import { type LivePhase, type LiveState, useVerificationRun } from "../useVerificationRun";
 import { CitationText } from "./CitationText";
 import { EvidenceTrace, type EvidenceRegistry, type EvidenceRowEntry } from "./EvidenceTrace";
 import { Masthead } from "./Masthead";
 
 interface VerificationPageProps {
   claimId: number;
+  initialRunId?: string;
   onBack: () => void;
+  onRunStarted: (runId: string) => void;
 }
 
-type LivePhase = "decompose" | "research" | "verdict";
-type ThreadActivityStatus = "queued" | "retrieving" | "retrieved" | "evaluating" | "resolved" | "open";
+export function VerificationPage({ claimId, initialRunId, onBack, onRunStarted }: VerificationPageProps) {
+  const { cancel, data, error, errorTitle, live, retry } = useVerificationRun({
+    claimId,
+    initialRunId,
+    onRunStarted,
+  });
 
-interface ThreadActivity {
-  round: number;
-  status: ThreadActivityStatus;
-  queries?: string[];
-  newHits?: number;
-  uniqueRetained?: number;
-  reasoning?: string;
-}
-
-interface LiveState {
-  claim: string;
-  status: string;
-  threads: LiveThread[];
-  rounds: Round[];
-  tokens: number;
-  phase: LivePhase;
-  currentRound: number;
-  maxRounds: number;
-  activities: Record<string, ThreadActivity>;
-}
-
-function initialLiveState(): LiveState {
-  return {
-    claim: "",
-    status: "Decomposing the claim into research questions…",
-    threads: [],
-    rounds: [],
-    tokens: 0,
-    phase: "decompose",
-    currentRound: 0,
-    maxRounds: 3,
-    activities: {},
+  const handleBack = () => {
+    void cancel().catch(() => undefined);
+    onBack();
   };
-}
-
-export function VerificationPage({ claimId, onBack }: VerificationPageProps) {
-  const [data, setData] = useState<VerifyResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [live, setLive] = useState<LiveState>(initialLiveState);
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let source: EventSource | null = null;
-    let finished = false;
-    setData(null);
-    setError(null);
-    setLive(initialLiveState());
-
-    startVerificationRun(claimId, controller.signal).then(({ run_id: runId }) => {
-      if (controller.signal.aborted) return;
-      source = new EventSource(`/api/runs/${runId}/events`);
-
-      const listen = <T,>(eventName: string, handler: (payload: T) => void) => {
-        source?.addEventListener(eventName, (event) => {
-          try {
-            handler(JSON.parse((event as MessageEvent<string>).data) as T);
-          } catch {
-            source?.close();
-            setError("The live trace returned an unreadable event.");
-          }
-        });
-      };
-
-      listen<RunStartedEvent>("run_started", (event) => {
-        setLive((current) => ({ ...current, claim: event.claim }));
-      });
-      listen<DecompositionCompletedEvent>("decomposition_completed", (event) => {
-        setLive((current) => ({
-          ...current,
-          status: `Created ${event.threads.length} research question${event.threads.length === 1 ? "" : "s"}.`,
-          threads: event.threads,
-          tokens: event.total_tokens_used,
-          phase: "research",
-          maxRounds: event.max_rounds,
-          activities: Object.fromEntries(
-            event.threads.map((thread) => [thread.thread_id, { round: 0, status: "queued" }]),
-          ),
-        }));
-      });
-      listen<RetrievalStartedEvent>("retrieval_started", (event) => {
-        setLive((current) => ({
-          ...current,
-          status: `Searching the evidence store — round ${event.round}…`,
-          phase: "research",
-          currentRound: event.round,
-          maxRounds: event.max_rounds,
-        }));
-      });
-      listen<ThreadRetrievalStartedEvent>("thread_retrieval_started", (event) => {
-        setLive((current) => ({
-          ...current,
-          activities: {
-            ...current.activities,
-            [event.thread_id]: {
-              round: event.round,
-              status: "retrieving",
-              queries: event.queries,
-            },
-          },
-        }));
-      });
-      listen<ThreadRetrievalCompletedEvent>("thread_retrieval_completed", (event) => {
-        setLive((current) => ({
-          ...current,
-          activities: {
-            ...current.activities,
-            [event.thread_id]: {
-              ...current.activities[event.thread_id],
-              round: event.round,
-              status: "retrieved",
-              newHits: event.new_hits,
-              uniqueRetained: event.unique_retained,
-            },
-          },
-        }));
-      });
-      listen<RetrievalCompletedEvent>("retrieval_completed", (event) => {
-        setLive((current) => ({
-          ...current,
-          status: `Checking whether round ${event.round} evidence is sufficient…`,
-          threads: event.threads,
-        }));
-      });
-      listen<ThreadSufficiencyStartedEvent>("thread_sufficiency_started", (event) => {
-        setLive((current) => ({
-          ...current,
-          activities: {
-            ...current.activities,
-            [event.thread_id]: {
-              ...current.activities[event.thread_id],
-              round: event.round,
-              status: "evaluating",
-            },
-          },
-        }));
-      });
-      listen<ThreadSufficiencyCompletedEvent>("thread_sufficiency_completed", (event) => {
-        setLive((current) => ({
-          ...current,
-          threads: current.threads.map((thread) => thread.thread_id === event.thread_id
-            ? { ...thread, resolved: event.resolved, reasoning: event.reasoning }
-            : thread),
-          activities: {
-            ...current.activities,
-            [event.thread_id]: {
-              ...current.activities[event.thread_id],
-              round: event.round,
-              status: event.resolved ? "resolved" : "open",
-              reasoning: event.reasoning,
-            },
-          },
-        }));
-      });
-      listen<RoundCompletedEvent>("round_completed", (event) => {
-        setLive((current) => ({
-          ...current,
-          status: event.is_sufficient
-            ? "Evidence is sufficient; preparing the verdict…"
-            : `Round ${event.round.round} complete; refining unresolved questions…`,
-          threads: event.threads,
-          rounds: [...current.rounds.filter((round) => round.round !== event.round.round), event.round],
-          tokens: event.total_tokens_used,
-        }));
-      });
-      listen<{ rounds_completed: number }>("verdict_started", (event) => {
-        setLive((current) => ({
-          ...current,
-          status: "Synthesizing the final verdict and validating citations…",
-          phase: "verdict",
-          currentRound: event.rounds_completed,
-        }));
-      });
-      listen<VerifyResponse>("completed", (event) => {
-        finished = true;
-        source?.close();
-        setData(event);
-      });
-      listen<{ message: string }>("failed", (event) => {
-        finished = true;
-        source?.close();
-        setError(event.message);
-      });
-      source.onerror = () => {
-        if (!finished && source?.readyState === EventSource.CLOSED) {
-          setError("The live trace connection closed before the run completed.");
-        }
-      };
-    }).catch((reason: unknown) => {
-      if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setError(reason instanceof Error ? reason.message : String(reason));
-    });
-
-    return () => {
-      controller.abort();
-      source?.close();
-    };
-  }, [claimId, retry]);
 
   return (
     <>
-      <Masthead onBack={onBack} />
+      <Masthead onBack={handleBack} />
       {error ? (
         <div className="findings">
-          <span className="section-title">Run failed</span>
+          <span className="section-title">{errorTitle}</span>
           <p>{error}</p>
           <p style={{ marginTop: 14 }}>
-            <button className="cite" onClick={() => setRetry((value) => value + 1)}>Retry</button>
+            <button className="cite" onClick={retry}>Retry</button>
           </p>
         </div>
       ) : data ? (

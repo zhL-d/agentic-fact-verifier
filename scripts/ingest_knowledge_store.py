@@ -8,15 +8,23 @@ Usage:
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 import torch
 from elasticsearch import Elasticsearch, helpers
 from sentence_transformers import SentenceTransformer
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from agentic_fact_verifier.retrieval import (  # noqa: E402
+    EMBEDDING_MODEL,
+    EMBEDDING_MODEL_REVISION,
+    prompt_kwargs,
+)
+
 KNOWLEDGE_STORE_DIR = Path(__file__).parent.parent / "data" / "knowledge_store" / "dev"
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v2-moe")
 EMBEDDING_PASSAGE_PROMPT = os.environ.get("EMBEDDING_PASSAGE_PROMPT", "passage")
 BATCH_SIZE = 256
 
@@ -105,7 +113,7 @@ def index_claim(es: Elasticsearch, model: SentenceTransformer, claim_file: Path)
         return 0
 
     texts = [c["text"] for c in chunks]
-    encode_kwargs = {"prompt_name": EMBEDDING_PASSAGE_PROMPT} if EMBEDDING_PASSAGE_PROMPT else {}
+    encode_kwargs = prompt_kwargs(model, EMBEDDING_PASSAGE_PROMPT)
     embeddings = model.encode(
         texts, batch_size=BATCH_SIZE, show_progress_bar=False, normalize_embeddings=True, **encode_kwargs
     )
@@ -115,7 +123,7 @@ def index_claim(es: Elasticsearch, model: SentenceTransformer, claim_file: Path)
             "_index": INDEX_NAME,
             "_source": {**chunk, "embedding": embedding.tolist()},
         }
-        for chunk, embedding in zip(chunks, embeddings)
+        for chunk, embedding in zip(chunks, embeddings, strict=True)
     )
     success, errors = helpers.bulk(es, actions, raise_on_error=False)
     if errors:
@@ -128,13 +136,18 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="only process first N claim files")
     args = parser.parse_args()
 
-    es = Elasticsearch("http://localhost:9200")
+    es = Elasticsearch("http://localhost:9200", request_timeout=30, max_retries=3, retry_on_timeout=True)
     if not es.ping():
         raise SystemExit("Can't reach Elasticsearch at localhost:9200, is `docker compose up -d` running?")
 
     device = get_device()
     print(f"Loading {EMBEDDING_MODEL} on device={device}...")
-    model = SentenceTransformer(EMBEDDING_MODEL, device=device, trust_remote_code=True)
+    model = SentenceTransformer(
+        EMBEDDING_MODEL,
+        device=device,
+        revision=EMBEDDING_MODEL_REVISION,
+        trust_remote_code=True,
+    )
 
     claim_files = sorted(KNOWLEDGE_STORE_DIR.glob("*.json"), key=lambda p: int(p.stem))
     if args.limit:

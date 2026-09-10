@@ -19,9 +19,9 @@ class RecordingApp:
         self.scope = scope
 
 
-def _http_scope(headers: dict[str, str] | None = None) -> dict:
+def _http_scope(headers: dict[str, str] | None = None, path: str = "/mcp") -> dict:
     raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
-    return {"type": "http", "headers": raw_headers}
+    return {"type": "http", "headers": raw_headers, "path": path}
 
 
 async def _noop_receive():
@@ -75,3 +75,14 @@ async def test_lifespan_scope_always_passes_through_untouched():
 
     assert inner.called
     assert inner.scope == {"type": "lifespan"}
+
+
+async def test_health_endpoint_is_available_without_a_secret():
+    inner = RecordingApp()
+    middleware = SharedSecretAuthMiddleware(inner, SECRET)
+    send = _CapturingSend()
+
+    await middleware(_http_scope(path="/health"), _noop_receive, send)
+
+    assert not inner.called
+    assert send.messages[0]["status"] == 200

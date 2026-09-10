@@ -10,14 +10,17 @@ jobs:
   backend:
     name: Backend (lint + tests)
     runs-on: ubuntu-latest
+    env:
+      LANGSMITH_TRACING: "false"
+      LANGCHAIN_TRACING_V2: "false"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 
 
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d 
 
       - run: uv python install 3.12
 
-      # No API key, no Docker stack, every LLM/MCP call is mocked.
+      
       - run: uv sync
 
       - name: Lint (ruff)
@@ -33,9 +36,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 
         with:
           bun-version: "1.4.2"
 
@@ -46,3 +49,19 @@ jobs:
 
       - name: Type-check + build
         run: bun run build
+
+  containers:
+    name: Container build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 
+
+      - name: Validate Compose configuration
+        env:
+          MCP_SHARED_SECRET: ci-placeholder-not-used-at-build-time
+        run: docker compose config --quiet
+
+      - name: Build lightweight backend and frontend targets
+        run: |
+          docker build --target app .
+          docker build --target nginx .

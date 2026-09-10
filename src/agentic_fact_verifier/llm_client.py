@@ -1,13 +1,17 @@
 """Shared LLM-calling helper with retry-on-rate-limit and schema-constrained
 structured output."""
 
+import logging
 import os
+import random
 import time
 from typing import NamedTuple
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 from pydantic import BaseModel
+
+from agentic_fact_verifier.config import read_secret
 
 load_dotenv()
 
@@ -30,7 +34,7 @@ _PROVIDER_CONFIG = {
 
 PROVIDER = os.environ.get("LLM_PROVIDER", "openai").lower()
 if PROVIDER not in _PROVIDER_CONFIG:
-    raise SystemExit(f"Unknown LLM_PROVIDER {PROVIDER!r}; expected one of {list(_PROVIDER_CONFIG)}")
+    raise RuntimeError(f"Unknown LLM_PROVIDER {PROVIDER!r}; expected one of {list(_PROVIDER_CONFIG)}")
 
 _config = _PROVIDER_CONFIG[PROVIDER]
 BASE_URL = _config["base_url"]
@@ -41,6 +45,10 @@ _TEMPERATURE = _config["temperature"]
 
 MAX_RETRIES = 5
 BASE_BACKOFF_SECONDS = 2
+MAX_BACKOFF_SECONDS = 60
+LLM_TIMEOUT_SECONDS = float(os.environ.get("LLM_TIMEOUT_SECONDS", "120"))
+
+logger = logging.getLogger(__name__)
 
 _client: OpenAI | None = None
 
@@ -56,10 +64,15 @@ class LLMResult(NamedTuple):
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.environ.get(_API_KEY_ENV)
+        api_key = read_secret(_API_KEY_ENV)
         if not api_key:
-            raise SystemExit(f"{_API_KEY_ENV} not set.")
-        _client = OpenAI(api_key=api_key, base_url=BASE_URL)
+            raise RuntimeError(f"{_API_KEY_ENV} not set.")
+        _client = OpenAI(
+            api_key=api_key,
+            base_url=BASE_URL,
+            timeout=LLM_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
     return _client
 
 
@@ -90,13 +103,34 @@ def schema_response_format(model: type[BaseModel], name: str) -> dict:
     }
 
 
+def _is_retryable(exc: Exception) -> bool:
+    if isinstance(exc, (RateLimitError, APIConnectionError, APITimeoutError)):
+        return True
+    return isinstance(exc, APIStatusError) and exc.status_code >= 500
+
+
+def _retry_delay(exc: Exception, attempt: int) -> float:
+    if isinstance(exc, APIStatusError):
+        retry_after = exc.response.headers.get("retry-after")
+        if retry_after:
+            try:
+                return min(MAX_BACKOFF_SECONDS, max(0.0, float(retry_after)))
+            except ValueError:
+                pass
+    exponential = min(MAX_BACKOFF_SECONDS, BASE_BACKOFF_SECONDS * (2**attempt))
+    return random.uniform(exponential / 2, exponential)
+
+
 def call_llm(
     prompt_or_messages: str | list[dict],
     max_tokens: int = 6000,
     response_format: dict | None = None,
 ) -> LLMResult:
-    """Returns an `LLMResult(content, usage)`. Retries with exponential
-    backoff on 429s; other errors propagate immediately.
+    """Returns an `LLMResult(content, usage)`.
+
+    Retries transient connection, timeout, 429, and 5xx failures with
+    capped exponential backoff and jitter. Configuration and validation
+    errors fail immediately.
 
     `prompt_or_messages` is either a single user-turn string or a full
     messages list (for multi-turn self-correction). `response_format`,
@@ -104,9 +138,7 @@ def call_llm(
     `schema_response_format`."""
     client = _get_client()
     messages = (
-        [{"role": "user", "content": prompt_or_messages}]
-        if isinstance(prompt_or_messages, str)
-        else prompt_or_messages
+        [{"role": "user", "content": prompt_or_messages}] if isinstance(prompt_or_messages, str) else prompt_or_messages
     )
 
     for attempt in range(MAX_RETRIES):
@@ -120,12 +152,17 @@ def call_llm(
             )
             usage = completion.usage.model_dump() if completion.usage else {}
             return LLMResult(content=completion.choices[0].message.content, usage=usage)
-        except Exception as e:
-            is_rate_limit = "429" in str(e) or "RATE_LIMIT" in str(e)
-            if not is_rate_limit or attempt == MAX_RETRIES - 1:
+        except Exception as exc:
+            if not _is_retryable(exc) or attempt == MAX_RETRIES - 1:
                 raise
-            wait = BASE_BACKOFF_SECONDS * (2**attempt)
-            print(f"    (rate limited, retrying in {wait}s, attempt {attempt+1}/{MAX_RETRIES})")
+            wait = _retry_delay(exc, attempt)
+            logger.warning(
+                "Transient LLM failure; retrying in %.1fs (attempt %s/%s): %s",
+                wait,
+                attempt + 1,
+                MAX_RETRIES,
+                type(exc).__name__,
+            )
             time.sleep(wait)
 
     raise RuntimeError("unreachable")

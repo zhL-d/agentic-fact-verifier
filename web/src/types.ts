@@ -1,144 +1,188 @@
-// API response shapes shared across the frontend.
+import { z } from "zod";
 
-export interface EvidenceChunk {
-  text: string;
-  url: string;
-  retrieval_query: string;
-  injection_markers: string[];
-}
+export const evidenceChunkSchema = z.object({
+  text: z.string(),
+  url: z.string(),
+  retrieval_query: z.string().default(""),
+  injection_markers: z.array(z.string()).default([]),
+});
 
-export interface RoundThread {
-  thread_id?: string;
-  question: string;
-  queries_used: string[];
-  new_evidence: EvidenceChunk[];
-  n_new_evidence: number;
-  resolved: boolean;
-  reasoning: string;
-}
+export const roundThreadSchema = z.object({
+  thread_id: z.string().optional(),
+  question: z.string(),
+  queries_used: z.array(z.string()),
+  new_evidence: z.array(evidenceChunkSchema),
+  n_new_evidence: z.number().int().nonnegative(),
+  resolved: z.boolean(),
+  reasoning: z.string(),
+});
 
-export interface Round {
-  round: number;
-  threads: RoundThread[];
-}
+export const roundSchema = z.object({
+  round: z.number().int().positive(),
+  threads: z.array(roundThreadSchema),
+});
 
-export interface Thread {
-  thread_id?: string;
-  question: string;
-  resolved: boolean;
-  reasoning: string;
-  evidence: EvidenceChunk[];
-}
+export const threadSchema = z.object({
+  thread_id: z.string().optional(),
+  question: z.string(),
+  resolved: z.boolean(),
+  reasoning: z.string(),
+  evidence: z.array(evidenceChunkSchema),
+});
 
-export interface CitedSource {
-  citation_number: number;
-  url: string;
-}
+export const liveThreadSchema = threadSchema.extend({
+  thread_id: z.string(),
+  queries_to_run: z.array(z.string()),
+});
 
-export interface Verdict {
-  label: string;
-  justification: string;
-  citations: number[];
-  invalid_citations: number[];
-  n_evidence_available: number;
-  cited_sources: CitedSource[];
-  escalate: boolean;
-  escalation_reasons: string[];
-  total_tokens_used: number;
-  total_prompt_tokens: number;
-  total_completion_tokens: number;
-}
+export const verdictSchema = z.object({
+  label: z.string(),
+  justification: z.string(),
+  citations: z.array(z.number().int().positive()),
+  invalid_citations: z.array(z.number().int().positive()),
+  n_evidence_available: z.number().int().nonnegative(),
+  cited_sources: z.array(z.object({ citation_number: z.number().int().positive(), url: z.string() })),
+  escalate: z.boolean(),
+  escalation_reasons: z.array(z.string()),
+  total_tokens_used: z.number().int().nonnegative(),
+  total_prompt_tokens: z.number().int().nonnegative(),
+  total_completion_tokens: z.number().int().nonnegative(),
+});
 
-export interface VerifyResponse {
-  claim: string;
-  claim_id: string;
-  verdict: Verdict;
-  all_evidence: EvidenceChunk[];
-  rounds: Round[];
-  threads: Thread[];
-  gold_label: string;
-}
+export const verifyResponseSchema = z.object({
+  claim: z.string(),
+  claim_id: z.string(),
+  verdict: verdictSchema,
+  all_evidence: z.array(evidenceChunkSchema),
+  rounds: z.array(roundSchema),
+  threads: z.array(threadSchema),
+  gold_label: z.string(),
+});
 
-export interface ClaimSummary {
-  claim_id: number;
-  claim: string;
-  gold_label: string;
-}
+export const claimSummarySchema = z.object({
+  claim_id: z.number().int().nonnegative(),
+  claim: z.string(),
+  gold_label: z.string(),
+});
 
-export interface LiveThread extends Thread {
-  thread_id: string;
-  queries_to_run: string[];
-}
+export const runStatusSchema = z.enum([
+  "queued",
+  "running",
+  "retrying",
+  "cancelling",
+  "cancelled",
+  "succeeded",
+  "failed",
+]);
 
-export interface RetrievalDetail {
-  thread_id?: string;
-  question: string;
-  queries_used: string[];
-  new_evidence: EvidenceChunk[];
-  n_new_evidence: number;
-}
+export const startRunResponseSchema = z.object({ run_id: z.string().uuid(), status: runStatusSchema });
 
-export interface StartRunResponse {
-  run_id: string;
-}
+export const runResponseSchema = z.object({
+  run_id: z.string().uuid(),
+  claim_id: z.number().int().nonnegative(),
+  claim: z.string(),
+  gold_label: z.string(),
+  status: runStatusSchema,
+  cancel_requested: z.boolean(),
+  last_event_id: z.number().int().nonnegative(),
+  result: verifyResponseSchema.nullable(),
+  error: z.string().nullable(),
+  created_at: z.string(),
+  started_at: z.string().nullable(),
+  finished_at: z.string().nullable(),
+});
 
-export interface RunStartedEvent {
-  run_id: string;
-  claim_id: string;
-  claim: string;
-  gold_label: string;
-}
+export const runStartedEventSchema = z.object({
+  run_id: z.string().uuid(),
+  claim_id: z.string(),
+  claim: z.string(),
+  gold_label: z.string(),
+});
 
-export interface DecompositionCompletedEvent {
-  threads: LiveThread[];
-  total_tokens_used: number;
-  max_rounds: number;
-}
+export const decompositionCompletedEventSchema = z.object({
+  threads: z.array(liveThreadSchema),
+  total_tokens_used: z.number().int().nonnegative(),
+  max_rounds: z.number().int().positive(),
+});
 
-export interface RetrievalStartedEvent {
-  round: number;
-  max_rounds: number;
-}
+export const retrievalStartedEventSchema = z.object({
+  round: z.number().int().positive(),
+  max_rounds: z.number().int().positive(),
+});
 
-export interface RetrievalCompletedEvent {
-  round: number;
-  threads: LiveThread[];
-  details: RetrievalDetail[];
-}
+export const retrievalDetailSchema = z.object({
+  thread_id: z.string().optional(),
+  question: z.string(),
+  queries_used: z.array(z.string()),
+  new_evidence: z.array(evidenceChunkSchema),
+  n_new_evidence: z.number().int().nonnegative(),
+});
 
-export interface RoundCompletedEvent {
-  round: Round;
-  threads: LiveThread[];
-  is_sufficient: boolean;
-  total_tokens_used: number;
-}
+export const retrievalCompletedEventSchema = z.object({
+  round: z.number().int().positive(),
+  threads: z.array(liveThreadSchema),
+  details: z.array(retrievalDetailSchema),
+});
 
-export interface ThreadRetrievalStartedEvent {
-  thread_id: string;
-  question: string;
-  round: number;
-  queries: string[];
-}
+export const roundCompletedEventSchema = z.object({
+  round: roundSchema,
+  threads: z.array(liveThreadSchema),
+  is_sufficient: z.boolean(),
+  total_tokens_used: z.number().int().nonnegative(),
+});
 
-export interface ThreadRetrievalCompletedEvent {
-  thread_id: string;
-  question: string;
-  round: number;
-  new_hits: number;
-  unique_retained: number;
-}
+export const threadRetrievalStartedEventSchema = z.object({
+  thread_id: z.string(),
+  question: z.string(),
+  round: z.number().int().positive(),
+  queries: z.array(z.string()),
+});
 
-export interface ThreadSufficiencyStartedEvent {
-  thread_id: string;
-  question: string;
-  round: number;
-}
+export const threadRetrievalCompletedEventSchema = z.object({
+  thread_id: z.string(),
+  question: z.string(),
+  round: z.number().int().positive(),
+  new_hits: z.number().int().nonnegative(),
+  unique_retained: z.number().int().nonnegative(),
+});
 
-export interface ThreadSufficiencyCompletedEvent {
-  thread_id: string;
-  question: string;
-  round: number;
-  resolved: boolean;
-  reasoning: string;
-  refined_queries: string[];
-}
+export const threadSufficiencyStartedEventSchema = z.object({
+  thread_id: z.string(),
+  question: z.string(),
+  round: z.number().int().positive(),
+});
+
+export const threadSufficiencyCompletedEventSchema = z.object({
+  thread_id: z.string(),
+  question: z.string(),
+  round: z.number().int().positive(),
+  resolved: z.boolean(),
+  reasoning: z.string(),
+  refined_queries: z.array(z.string()),
+});
+
+export const retryingEventSchema = z.object({ attempt: z.number().int().positive(), message: z.string() });
+export const verdictStartedEventSchema = z.object({ rounds_completed: z.number().int().positive() });
+export const terminalMessageEventSchema = z.object({ message: z.string() });
+
+export type EvidenceChunk = z.infer<typeof evidenceChunkSchema>;
+export type RoundThread = z.infer<typeof roundThreadSchema>;
+export type Round = z.infer<typeof roundSchema>;
+export type Thread = z.infer<typeof threadSchema>;
+export type LiveThread = z.infer<typeof liveThreadSchema>;
+export type Verdict = z.infer<typeof verdictSchema>;
+export type VerifyResponse = z.infer<typeof verifyResponseSchema>;
+export type ClaimSummary = z.infer<typeof claimSummarySchema>;
+export type RunStatus = z.infer<typeof runStatusSchema>;
+export type StartRunResponse = z.infer<typeof startRunResponseSchema>;
+export type RunResponse = z.infer<typeof runResponseSchema>;
+export type RunStartedEvent = z.infer<typeof runStartedEventSchema>;
+export type DecompositionCompletedEvent = z.infer<typeof decompositionCompletedEventSchema>;
+export type RetrievalDetail = z.infer<typeof retrievalDetailSchema>;
+export type RetrievalStartedEvent = z.infer<typeof retrievalStartedEventSchema>;
+export type RetrievalCompletedEvent = z.infer<typeof retrievalCompletedEventSchema>;
+export type RoundCompletedEvent = z.infer<typeof roundCompletedEventSchema>;
+export type ThreadRetrievalStartedEvent = z.infer<typeof threadRetrievalStartedEventSchema>;
+export type ThreadRetrievalCompletedEvent = z.infer<typeof threadRetrievalCompletedEventSchema>;
+export type ThreadSufficiencyStartedEvent = z.infer<typeof threadSufficiencyStartedEventSchema>;
+export type ThreadSufficiencyCompletedEvent = z.infer<typeof threadSufficiencyCompletedEventSchema>;

@@ -6,11 +6,27 @@ Usage:
 """
 
 import os
+import sys
+from pathlib import Path
 
 from elasticsearch import Elasticsearch
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 INDEX_NAME = os.environ.get("ES_INDEX_NAME", "averitec_dev_chunks")
-EMBEDDING_DIMS = int(os.environ.get("EMBEDDING_DIMS", "768"))
+
+
+def _embedding_dims() -> int:
+
+    override = os.environ.get("EMBEDDING_DIMS")
+    if override:
+        return int(override)
+    from agentic_fact_verifier.retrieval import _get_model  # noqa: PLC0415
+
+    return _get_model().get_sentence_embedding_dimension()
+
+
+EMBEDDING_DIMS = _embedding_dims()
 
 MAPPING = {
     "properties": {
@@ -30,7 +46,7 @@ MAPPING = {
 
 
 def main():
-    es = Elasticsearch("http://localhost:9200")
+    es = Elasticsearch("http://localhost:9200", request_timeout=30, max_retries=3, retry_on_timeout=True)
 
     if not es.ping():
         raise SystemExit(

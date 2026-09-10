@@ -68,6 +68,8 @@ const verification: VerifyResponse = {
   },
 };
 
+const RUN_ID = "00000000-0000-4000-8000-000000000123";
+
 class FakeEventSource {
   static readonly CLOSED = 2;
   static instances: FakeEventSource[] = [];
@@ -102,6 +104,7 @@ describe("App", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     FakeEventSource.instances = [];
+    window.history.replaceState(null, "", "/");
   });
 
   it("renders live graph events before the final expandable evidence docket", async () => {
@@ -114,7 +117,7 @@ describe("App", () => {
         }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ run_id: "run-123" }), {
+        new Response(JSON.stringify({ run_id: RUN_ID, status: "queued" }), {
           status: 202,
           headers: { "Content-Type": "application/json" },
         }),
@@ -126,12 +129,12 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: /The test claim/ }));
     expect(screen.getByText("Live agent trace")).toBeInTheDocument();
     await waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
-    expect(FakeEventSource.instances[0].url).toBe("/api/runs/run-123/events");
+    expect(FakeEventSource.instances[0].url).toBe(`/api/runs/${RUN_ID}/events`);
 
     act(() => {
       const source = FakeEventSource.instances[0];
       source.emit("run_started", {
-        run_id: "run-123",
+        run_id: RUN_ID,
         claim_id: "1",
         claim: verification.claim,
         gold_label: verification.gold_label,
@@ -205,5 +208,58 @@ describe("App", () => {
 
     await user.click(screen.getAllByRole("button", { name: "1" })[0]);
     expect(screen.getByRole("button", { name: /EXAMPLE/ })).toHaveStyle({ outline: "2px solid var(--accent)" });
+  });
+
+  it("reattaches to a persisted active run from the URL", async () => {
+    window.history.replaceState(null, "", `/?claim=1&run=${RUN_ID}`);
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        run_id: RUN_ID,
+        claim_id: 1,
+        claim: verification.claim,
+        gold_label: verification.gold_label,
+        status: "running",
+        cancel_requested: false,
+        last_event_id: 4,
+        result: null,
+        error: null,
+        created_at: "2026-09-09T12:00:00+00:00",
+        started_at: "2026-09-09T12:00:01+00:00",
+        finished_at: null,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    expect(FakeEventSource.instances[0].url).toBe(`/api/runs/${RUN_ID}/events`);
+    expect(fetchSpy).toHaveBeenCalledWith(`/api/runs/${RUN_ID}`, expect.any(Object));
+  });
+
+  it("restores a completed result without starting another run", async () => {
+    window.history.replaceState(null, "", `/?claim=1&run=${RUN_ID}`);
+    vi.stubGlobal("EventSource", FakeEventSource);
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        run_id: RUN_ID,
+        claim_id: 1,
+        claim: verification.claim,
+        gold_label: verification.gold_label,
+        status: "succeeded",
+        cancel_requested: false,
+        last_event_id: 12,
+        result: verification,
+        error: null,
+        created_at: "2026-09-09T12:00:00+00:00",
+        started_at: "2026-09-09T12:00:01+00:00",
+        finished_at: "2026-09-09T12:01:00+00:00",
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("Claim under review")).toBeInTheDocument();
+    expect(FakeEventSource.instances).toHaveLength(0);
   });
 });

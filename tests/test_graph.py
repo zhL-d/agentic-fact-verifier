@@ -107,6 +107,27 @@ async def test_evidence_compaction_bounds_growth_and_keeps_most_recent(fake_tool
     assert threads[1]["evidence"][0]["text"].startswith("chunk#6-")
 
 
+def test_evidence_compaction_prefers_relevance_and_source_diversity():
+    chunks = [
+        {"text": "a" * 40, "url": "https://a.example/1", "retrieval_score": 0.9},
+        {"text": "b" * 40, "url": "https://a.example/1", "retrieval_score": 0.8},
+        {"text": "c" * 40, "url": "https://b.example/2", "retrieval_score": 0.7},
+    ]
+
+    compacted = graph_mod._compact_evidence(chunks, 90)
+
+    assert [chunk["url"] for chunk in compacted] == ["https://a.example/1", "https://b.example/2"]
+
+
+def test_evidence_deduplication_normalizes_whitespace_and_case():
+    chunks = [
+        {"text": "Same   Evidence", "url": "https://a.example"},
+        {"text": "same evidence", "url": "https://b.example"},
+    ]
+
+    assert graph_mod._dedupe(chunks) == [chunks[0]]
+
+
 async def _build_and_run(
     monkeypatch, fake_tool, decompose_fn, sufficiency_fn, judge_fn, retrieve_fn=_retrieve_returning_evidence
 ):
